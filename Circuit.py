@@ -14,11 +14,12 @@
 #   - Save/Load
 #
 ########################################################################################################################
+import tkinter
 from tkinter import *
+from  tkinter import font
 import tkinter.ttk as ttk
-import copy
-# import time
-import os
+import sys, threading, copy, os
+from time import time
 from typing import *
 
 NULL = -1  # Value which represents a gate which has not received a valid input yet
@@ -77,20 +78,22 @@ def logic_xor(inps: list[int]) -> int:
     return result
 
 
-def logic_clock(inps: list[int], gate) -> int:
-    if list_contains(inps, NULL):
-        return NULL
+def logic_clock(gate) -> int:
+    if not gate.get_event().is_set() and not Application.clocks_paused:  # Might be broke
+        # call f() again in 60 seconds
+        threading.Timer(gate.get_rate(), logic_clock, [gate]).start()
+        gate.toggle()
 
-    return gate.toggle()
+    return gate.output()
 
 
 # Global counter for each input object, gives each object a unique id
-GATE_IMG_FOLDER = "images"
+IMG_FOLDER = "images"
 INPUT_GATES = [power, logic_not, logic_and, logic_nand, logic_or, logic_xor, logic_clock]
 
 
 def get_input_img_file(func) -> str:
-    global GATE_IMG_FOLDER
+    global IMG_FOLDER
 
     img_name = ""
     if func == power:
@@ -108,7 +111,7 @@ def get_input_img_file(func) -> str:
     elif func == logic_clock:
         img_name = "clock.png"
 
-    return os.path.join(GATE_IMG_FOLDER, img_name)
+    return os.path.join(IMG_FOLDER, img_name)
 
 
 def get_input_img(func, output: Optional[list[PhotoImage]] = None) -> Optional[PhotoImage]:
@@ -251,7 +254,7 @@ class InputTk:
             return self.out
 
         if self.func == logic_clock:
-            self.out = self.func([inp.output() for inp in self.inputs], self)
+            self.out = self.func(self)
         else:
             self.out = self.func([inp.output() for inp in self.inputs])
 
@@ -271,6 +274,7 @@ class InputTk:
 
     def set_output(self, out: int) -> None:
         self.out = out
+        self.update_line_colors()
 
     def get_func(self) -> Any:
         return self.func
@@ -317,7 +321,7 @@ class InputTk:
 
         line_color = get_line_fill(src_out)
 
-        line_id = self.canvas.create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=3, fill=line_color)
+        line_id = self.canvas.create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4, fill=line_color)
         self.add_input_line(line_id)
         src_gate.add_output_line(line_id)
 
@@ -348,12 +352,10 @@ class InputTk:
             self.remove_output(other)
             other.remove_input(self)
             other.set_output(NULL)
-            other.update_line_colors()
         else:
             self.remove_input(other)
             other.remove_output(self)
             self.set_output(NULL)
-            self.update_line_colors()
 
     def remove_rect(self) -> None:
         if self.rect_id >= 0:
@@ -383,9 +385,8 @@ class InputTk:
             input_gate.remove_output(self)
 
         for output_gate in self.output_gates:
-            output_gate.set_output(NULL)
             output_gate.remove_input(self)
-            output_gate.update_line_colors()
+            output_gate.set_output(NULL)
 
         self.remove_all_lines()
 
@@ -443,30 +444,103 @@ class InputTk:
         return self.center[0] + self.get_width() // 2, self.center[1] + self.get_height() // 2
 
     def __str__(self) -> str:
-        return "<InputTK {0} {1} {2}>".format(hex(id(self)), self.func.__name__, self.output())
+        return "<InputTK {0} {1} {2}>".format(hex(id(self)), "func: " + self.func.__name__, "state: " + str(self.output()))
+
+
+class ClockTimer:
+    def __init__(self, func, rate, gate):
+        self.startTime = 0
+        self.endTime = 0
+        self.gate = gate
+        self.func = func
+        self.rate = rate
+        self.timer = threading.Timer(self.rate, self.func, args=[self.gate])
+        self.started = False
+
+    def pause(self) -> float:
+        self.endTime = time()
+        self.timer.cancel()
+        return self.endTime
+
+    def start(self) -> float:
+        self.timer.cancel()
+        self.startTime = self.endTime = time()
+        self.timer = threading.Timer(self.rate, self.func, args=[self.gate])
+        self.timer.start()
+        self.started = True
+        return self.startTime
+
+    def resume(self) -> None:
+        self.timer = threading.Timer(self.rate-(self.endTime-self.startTime), self.func, args=[self.gate])
+        self.timer.start()
+
+    def cancel(self) -> None:
+        self.timer.cancel()
+        self.startTime = self.endTime = 0
+        self.started = False
 
 
 class ClockTk(InputTk):
-    def __init__(self, update_rate: int, label: str = "", canvas: Optional[Canvas] = None,
-                 center: (int, int) = (NULL, NULL), ins: Optional[list] = None,
-                 out: int = NULL):
-        super().__init__(logic_clock, label, canvas, center, ins, out)
+    """An alternating power source, which toggles after self.rate seconds have passed"""
+    def __init__(self, update_rate: float, label: str = "", canvas: Optional[Canvas] = None,
+                 center: (int, int) = (NULL, NULL), default_state: int = TRUE):
+        super().__init__(logic_clock, label, canvas, center, ins=None, out=default_state)  # A clock has not inputs
+        self.timer = ClockTimer(logic_clock, update_rate, self)
         self.rate = update_rate
+        self.default_state = default_state
+        self.stop_event = threading.Event()
+        self.first_run = True
 
     def toggle(self) -> int:
-        if self.out == NULL:
-            return NULL
+        self.set_output(not self.out)
+        return self.out
 
-        return not self.out
+    def delete(self):
+        self.stop()
+        InputTk.delete(self)
 
-    def set_rate(self, rate: int) -> None:
+    def start(self):
+        if not self.timer.started:
+            self.timer.start()
+        else:
+            self.timer.resume()
+
+    def stop(self):
+        self.timer.cancel()
+        self.set_output(self.default_state)
+
+    def pause(self):
+        self.timer.pause()
+
+    def set_default_state(self, state: int):
+        self.out = state
+        self.default_state = state
+
+    def set_rate(self, rate: float) -> None:
         self.rate = rate
 
-    def get_rate(self) -> int:
+    def get_rate(self) -> float:
         return self.rate
+
+    def get_event(self) -> threading.Event:
+        return self.stop_event
+
+    def is_first_run(self) -> bool:
+        return self.first_run
+
+    def first_run_done(self) -> None:
+        self.first_run = False
+
+    def __str__(self) -> str:
+        return "<ClockTK {0} {1} {2}>".format(hex(id(self)), "rate: " + str(self.rate), "state: " + str(self.output()))
 
 
 def connect_gates(src_gate: InputTk, dest_gate: InputTk) -> None:
+    # Only allow one input to a not gate
+    # Clocks can only be outputs, so return if one is set as a destination gate
+    if (is_not_gate(dest_gate) and len(dest_gate.get_input_gates()) == 1) or is_clock(dest_gate):
+        return
+
     if not is_parent(dest_gate, src_gate) and dest_gate not in src_gate.get_output_gates():
         dest_gate.add_line(src_gate)
 
@@ -495,8 +569,9 @@ def is_not_gate(gate: InputTk) -> bool:
     return gate.get_func() == logic_not
 
 
-def is_clock(gate: InputTk) -> bool:
-    return gate.get_func == logic_clock
+def is_clock(gate) -> bool:
+    # return gate.get_func() == logic_clock
+    return isinstance(gate, ClockTk)
 
 
 def connection_exists(gate1: InputTk, gate2: InputTk) -> bool:
@@ -537,8 +612,9 @@ class TableCheckbutton(Frame):
         if gate is not None:
             self.check_var = IntVar(value=gate.output())
             # self.check_var.set(1)  # Default the checkbox to on
-            self.checkbutton = ttk.Checkbutton(self, variable=self.check_var, text=self.gate.get_label(),
-                                               onvalue=TRUE, offvalue=FALSE, width=10, command=self.click_cb)
+            self.checkbutton = Checkbutton(self, variable=self.check_var, text=self.gate.get_label(),
+                                           onvalue=TRUE, offvalue=FALSE, width=10, command=self.click_cb,
+                                           font="Helvetica 10")
             if checkbutton_padding is not None:
                 self.checkbutton.grid(row=0, column=0, **checkbutton_padding)
             else:
@@ -551,7 +627,6 @@ class TableCheckbutton(Frame):
     def click_cb(self):
         self.return_focus_to.focus_force()
         self.gate.set_output(self.check_var.get())
-        self.gate.update_line_colors()
 
     def update_text(self, text: str) -> None:
         self.gate.set_label(text)
@@ -563,12 +638,12 @@ class TableCheckbutton(Frame):
 
 class CheckbuttonTable(LabelFrame):
     def __init__(self, parent, title: str, return_focus_to: Widget, *args,  **kwargs):
-        super().__init__(parent, *args, text=title, **kwargs)
+        super().__init__(parent, *args, text=title, font="Helvetica 10", **kwargs)
         self.checkbox_padding = {"padx": (20, 5), "pady": (5, 5)}
         self.return_focus_to = return_focus_to
         self.entries = []  # List holding list of TableCheckbutton
 
-        self.empty_text_label = Label(self, bg="white", text="You have no inputs...")
+        self.empty_text_label = Label(self, bg="white", text="You have no inputs...", font="Helvetica 10")
         self.empty_text_label.grid()
         self.null = True
 
@@ -627,6 +702,7 @@ class Application(Tk):
     line_fill_false = "red"
     line_fill_null = "black"
     max_selectable_gates = 100
+    clocks_paused = True
 
     def __init__(self, width: int = 1024, height: int = 768):
         super().__init__()
@@ -643,7 +719,7 @@ class Application(Tk):
         # List to hold references to the Photoimages of the input gates so that Tkinter doesn't garbage collect
         # prematurely
         self.imgs = get_all_input_imgs()
-        self.default_update_rate = 1000  # Default Update for a new clock in milliseconds, default to 1s
+        self.default_update_rate = 2  # Default Update for a new clock in seconds, default to 2s
         self.update_lines = False  # Set to true when a new gate/power source is added/changed to redraw lines
 
         # Dictionary to hold the input gates, where the gate type is the key and the value is the list of gates
@@ -654,34 +730,54 @@ class Application(Tk):
         self.active_input = None  # The input object to be placed when the user clicks the mouse
         self.active_input_pi = None  # Photoimage for active gate
         self.active_input_img_index = 0  # Canvas image index of active gate
+        # Fonts #####################
+        self.font_family = "Helvetica"
+        self.default_font_size = 10
+        self.default_font = tkinter.font.Font(family=self.font_family, weight=tkinter.font.NORMAL,
+                                              slant=tkinter.font.ROMAN)
+        self.font_top = tkinter.font.Font(family=self.font_family, size=11, weight=tkinter.font.NORMAL,
+                                          slant=tkinter.font.ROMAN)
+        self.font_prompt = self.default_font
+
+        #############################
         # ICB Widgets ###############
         self.screen_icb = None
         self.icb_menubar = None  # Top Menu (File, Edit, Help...)
         self.icb_is_gate_active = False  # If True, shows input gate as cursor is dragged around
         self.icb_selected_gates = []  # Holds references to all currently selected gates when performing operations
         self.icb_click_drag_gate = None  # The gate currently being moved by the mouse
+        self.icb_play_pause_button = None  # Button which starts and stops
+        self.icb_play_pause_pi = None  # Photoimage for play/pause button
         #############################
         # Prompt Widgets ############
         self.screen_prompt = None  # Toplevel popup window for prompt
         self.prompt_label = None  # Label to display prompt message
-        self.prompt_button_confirm = None
-        self.prompt_button_cancel = None
+        self.prompt_button_confirm = None  # Confirmation button
+        self.prompt_button_cancel = None  # Cancellation button
         #############################
         # Input Selection Widgets ###
         self.screen_is = None  # Separate Window to select which gate input to place
-        self.screen_is_width = 140
-        self.screen_is_height = self.height
-        self.is_button_frame = None
-        self.is_border_frame = None
+        self.screen_is_width = 145  # Width of the frame
+        self.screen_is_height = self.height  # The window is as tall as the window
+        self.is_button_frame = None  # Frame a button is placed on
+        self.is_border_frame = None  # Border frame for a button
         self.is_button = None  # Stores reference to a button so Tk doesn't GC it prematurely
         self.is_buttons = []  # Holds tuple: the buttons for each input gate and its border frame
-        self.is_edit_table = None  # Table to edit
+        self.is_edit_table = None  # Table to toggle inputs on/off
         #############################
         #############################
-        # Context Menu Widgets ###
-        self.timer_popup = None
-        self.selected_timer = None
-        self.timer_rate = IntVar(value=0)
+        # Timer Window Widgets ######
+        self.timer_popup = None  # Toplevel popup window for window
+        self.timer_labelframe = None  # Label Frame for popup
+        self.timer_title_label = None  # Label to give instructions to user
+        self.selected_timer = None  # The timer that is currently being modified
+        self.timer_state_label = None  # Text label for checkbox, use instead of checkbox text to put left of checkbox
+        self.timer_state_cb = None  # Checkbox to toggle the timer's default state
+        self.timer_state_intvar = IntVar(value=TRUE)  # Value of the default state checkbox
+        self.timer_entry_label = None  # Label next to timer entry
+        self.timer_entry = None  # Entry for timer toggle rate
+        self.timer_entry_strvar = StringVar(value=str(self.default_update_rate))  # Value of the timer update rate
+        self.timer_done_button = None  # Button to close window
         #############################
 
     def input_gates_intersect(self, event: Event) -> (bool, Optional[InputTk]):
@@ -767,9 +863,14 @@ class Application(Tk):
             if len(self.icb_selected_gates) == 0:
                 first_gate.add_rect()
                 self.icb_selected_gates.append(first_gate)
-            elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] != first_gate:
+            elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] != first_gate:  # Gate is already selected and the second gate is different from the first
                 connect_gates(self.icb_selected_gates[0], first_gate)
                 self.deselect_active_gates()
+            elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] == first_gate:  # Gate is already selected and the second gate is the same as the first
+                if is_clock(first_gate):
+                    self.selected_timer = first_gate
+                    self.timer_prompt()
+                    self.deselect_active_gates()
             else:
                 self.deselect_active_gates()
 
@@ -821,7 +922,6 @@ class Application(Tk):
 
     def update_selected_gates(self):
         for gate in self.icb_selected_gates:
-            # print("Updating:", gate)
             gate.update_line_colors()
 
     def place_gate(self, event: Event) -> None:
@@ -831,18 +931,20 @@ class Application(Tk):
 
             self.active_input_pi = PhotoImage(file=self.active_input.image_path())
             inst_num = len(self.inputs[self.active_input.get_func()]) + 1
-            if isinstance(self.active_input, InputTk):
+
+            if is_clock(self.active_input):
+                self.inputs[self.active_input.get_func()].append(ClockTk(update_rate=self.default_update_rate,
+                                                                         label=self.active_input.get_label() + str(inst_num),
+                                                                         canvas=self.screen_icb,
+                                                                         center=(event.x, event.y)))
+                self.selected_timer = self.inputs[self.active_input.get_func()][-1]
+                print(self.selected_timer.get_label())
+                self.timer_prompt()
+            elif isinstance(self.active_input, InputTk):
                 self.inputs[self.active_input.func].append(InputTk(self.active_input.get_func(),
                                                                    label=self.active_input.get_label() + str(inst_num),
                                                                    canvas=self.screen_icb, center=(event.x, event.y),
                                                                    out=self.active_input.out))
-            elif is_clock(self.active_input):
-                self.inputs[self.active_input.get_func()].append(ClockTk(self.default_update_rate,
-                                                                   label=self.active_input.get_label() + str(inst_num),
-                                                                   canvas=self.screen_icb,
-                                                                   center=(event.x, event.y),
-                                                                   out=self.active_input.out))
-                # self.screen_icb.after(self.default_update_rate, self.inputs[self.active_input.func][-1].toggle)
             last_input = self.inputs[self.active_input.func][-1]
             self.active_input_img_index = last_input.get_id()
             # Add checkbox entry to entry menu if gate is a power source
@@ -884,46 +986,81 @@ class Application(Tk):
     def help(self):
         pass
 
-    def set_active_fn_none(self):
+    def pause(self, event: Event):
+        """Pauses all timers"""
+        print("pause")
+        Application.clocks_paused = True
+        for clock in self.inputs[logic_clock]:
+            clock.pause()
+
+    def play(self, event: Optional[Event] = None):
+        """Starts all timers"""
+        print("play")
+        Application.clocks_paused = False
+        for clock in self.inputs[logic_clock]:
+            clock.start()
+
+    def reset(self, event: Optional[Event] = None):
+        """Resets the timers in the program"""
+        print("reset")
+        Application.clocks_paused = True
+        for clock in self.inputs[logic_clock]:
+            clock.stop()
+
+    def toggle_play_pause(self, event: Optional[Event] = None):
+        if not Application.clocks_paused:
+            print("pausing")
+            """Pauses all timers"""
+            Application.clocks_paused = True
+            for clock in self.inputs[logic_clock]:
+                clock.pause()
+        else:
+            print("starting")
+            """Starts all timers"""
+            Application.clocks_paused = False
+            for clock in self.inputs[logic_clock]:
+                clock.start()
+
+    def set_active_fn_none(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = False
         self.screen_icb.delete(self.active_input_img_index)
 
-    def set_active_fn_power(self):
+    def set_active_fn_power(self) -> None:
         self.icb_is_gate_active = True
         self.active_input = InputTk(power, label="Power #", canvas=self.screen_icb, out=TRUE)
 
-    def set_active_fn_and(self):
+    def set_active_fn_and(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
         self.active_input = InputTk(logic_and, label="And Gate #", canvas=self.screen_icb)
 
-    def set_active_fn_nand(self):
+    def set_active_fn_nand(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
         self.active_input = InputTk(logic_nand, label="Nand Gate #", canvas=self.screen_icb)
 
-    def set_active_fn_xor(self):
+    def set_active_fn_xor(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
         self.active_input = InputTk(logic_xor, label="Xor Gate #", canvas=self.screen_icb)
 
-    def set_active_fn_not(self):
+    def set_active_fn_not(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
         self.active_input = InputTk(logic_not, label="Not Gate #", canvas=self.screen_icb)
 
-    def set_active_fn_or(self):
+    def set_active_fn_or(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
         self.active_input = InputTk(logic_or, label="Or Gate #", canvas=self.screen_icb)
 
-    def set_active_fn_clock(self):
+    def set_active_fn_clock(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
         self.active_input = ClockTk(self.default_update_rate, label="Clock #", canvas=self.screen_icb)
 
-    def gui_build_icb(self):
+    def gui_build_icb(self) -> None:
         self.screen_icb = Canvas(self, width=self.width, height=self.height, bg='white')
         self.screen_icb.grid(row=0, column=0, sticky="NESW")
         self.screen_icb.bind('<Motion>', self.motion_cb)
@@ -933,7 +1070,15 @@ class Application(Tk):
         self.screen_icb.bind('<Button-4>', self.delete_cb)
         self.screen_icb.bind('<KeyRelease-BackSpace>', self.delete_cb)
         self.screen_icb.bind('<Control-Button-1>', self.multi_select_cb)
-        self.screen_icb.bind('<space>', self.remove_connection_cb)
+        self.screen_icb.bind('<c>', self.remove_connection_cb)
+        self.screen_icb.bind('<r>', self.reset)
+        self.screen_icb.bind('<F3>', self.reset)
+        self.screen_icb.bind('<p>', self.play)
+        self.screen_icb.bind('<F1>', self.play)
+        self.screen_icb.bind('<P>', self.pause)
+        self.screen_icb.bind('<F2>', self.pause)
+        self.screen_icb.bind('<space>', self.toggle_play_pause)
+
         self.screen_icb.focus_force()
 
     def gui_build_input_selection_menu(self) -> None:
@@ -971,46 +1116,89 @@ class Application(Tk):
         self.prompt("Exit Confirmation", "Are You Sure You Want To Exit?", self.exit_app)
 
     def exit_app(self) -> None:
+        self.reset(None)
         self.quit()
         self.destroy()
         self.update()
+        sys.exit(0)
 
-    def time_popup(self):
+    def timer_prompt(self):
         if self.selected_timer is None:
             return
 
+        self.reset()
         self.timer_popup = Toplevel(self)
+        self.timer_popup.resizable(False, False)
         self.timer_popup.title("Editing " + self.selected_timer.get_label())
+        # Make window modal
+        self.timer_popup.wait_visibility()
+        self.timer_popup.grab_set()
+        self.timer_popup.transient(self)
 
-        self.prompt_label = ttk.Label(self.screen_prompt, text="Text")
-        self.prompt_label.pack(padx=(15, 15), pady=(15, 15))
+        self.timer_state_intvar.set(self.selected_timer.output())
+        self.timer_entry_strvar.set(str(self.selected_timer.get_rate()))
 
-        self.prompt_button_confirm = ttk.Button(self.screen_prompt, text="Yes", command=None)
-        self.prompt_button_confirm.pack(side=LEFT, padx=(55, 5), pady=(10, 20))
+        self.timer_labelframe = LabelFrame(self.timer_popup, text="Set Clock Properties", font=self.font_top)
+        self.timer_labelframe.grid(padx=(5, 5), pady=(0, 5))
 
-        self.prompt_button_cancel = ttk.Button(self.screen_prompt, text="Cancel", command=self.close_prompt)
-        self.prompt_button_cancel.pack(side=RIGHT, padx=(5, 55), pady=(10, 20))
+        entry_frame = Frame(self.timer_labelframe)
+        entry_frame.grid(row=0, column=0, padx=(10, 10), pady=(5, 10))
 
-        self.screen_prompt.resizable(False, False)
-        self.wait_window(self.screen_prompt)
+        self.timer_entry_label = Label(entry_frame, text="Timer Update Rate (seconds):", font=self.font_prompt)
+        self.timer_entry_label.grid(row=0, column=0, padx=(0, 5), pady=(0, 0), sticky=W)
+        self.timer_entry = Entry(entry_frame, textvariable=self.timer_entry_strvar, width=5, font=self.default_font)
+        self.timer_entry.grid(row=0, column=1, padx=(0, 0), pady=(0, 0), sticky=W)
+
+        cb_frame = Frame(self.timer_labelframe)
+        cb_frame.grid(row=1, column=0, padx=(0, 20), pady=(0, 10))
+        self.timer_state_label = Label(cb_frame, text="Set Timer State (Default On):", font=self.font_prompt)
+        self.timer_state_label.grid(row=0, column=0, padx=(0, 5))
+        self.timer_state_cb = Checkbutton(cb_frame, variable=self.timer_state_intvar, font=self.default_font)
+        self.timer_state_cb.grid(row=0, column=1, padx=(0, 0), pady=(0, 0), sticky=W)
+
+        self.timer_done_button = Button(self.timer_labelframe, text="Done", command=self.close_timer_popup, font=self.default_font)
+        self.timer_done_button.grid(row=2, column=0)
+        self.wait_window(self.timer_popup)
+
+    def close_timer_popup(self):
+        # Update timer settings
+        self.selected_timer.set_rate(float(self.timer_entry_strvar.get()))
+        self.selected_timer.set_output(self.timer_state_intvar.get())
+        print("Updated timer:", self.selected_timer)
+        # Reset popup state
+        self.selected_timer = None
+        self.timer_state_intvar = IntVar(value=True)
+        self.timer_entry_strvar.set(str(self.default_update_rate))
+
+        self.timer_popup.grab_release()
+        self.timer_popup.destroy()
+        self.timer_popup.update()
 
     def prompt(self, title: str, msg: str, callback):
         self.screen_prompt = Toplevel(self)
         self.screen_prompt.title(title)
+        # Modal window.
+        self.screen_prompt.wait_visibility()
+        self.screen_prompt.grab_set()
+        self.screen_prompt.transient(self)
 
-        self.prompt_label = ttk.Label(self.screen_prompt, text=msg)
+        self.prompt_label = ttk.Label(self.screen_prompt, text=msg, font=self.font_prompt)
         self.prompt_label.pack(padx=(15, 15), pady=(15, 15))
 
-        self.prompt_button_confirm = ttk.Button(self.screen_prompt, text="Yes", command=callback)
+        self.prompt_button_confirm = Button(self.screen_prompt, text="Yes", command=callback,
+                                            font=self.font_prompt)
         self.prompt_button_confirm.pack(side=LEFT, padx=(55, 5), pady=(10, 20))
 
-        self.prompt_button_cancel = ttk.Button(self.screen_prompt, text="Cancel", command=self.close_prompt)
+        self.prompt_button_cancel = Button(self.screen_prompt, text="Cancel", command=self.close_prompt,
+                                           font=self.font_prompt)
         self.prompt_button_cancel.pack(side=RIGHT, padx=(5, 55), pady=(10, 20))
 
         self.screen_prompt.resizable(False, False)
+
         self.wait_window(self.screen_prompt)
 
     def close_prompt(self) -> None:
+        self.screen_prompt.grab_release()
         self.screen_prompt.destroy()
         self.screen_prompt.update()
 
@@ -1023,23 +1211,27 @@ class Application(Tk):
         edit_menu = Menu(self.icb_menubar, tearoff=0)
         help_menu = Menu(self.icb_menubar, tearoff=0)
 
-        file_menu.add_command(label="New", command=self.new)
-        file_menu.add_command(label="Open", command=self.open)
-        file_menu.add_command(label="Save", command=self.save)
-        file_menu.add_command(label="Save as...", command=self.save_as)
-        file_menu.add_command(label="Preferences", command=self.preference_window)
-        file_menu.add_command(label="Clear", command=self.clear)
+        file_menu.add_command(label="New", command=self.new, font=self.font_top)
+        file_menu.add_command(label="Open", command=self.open, font=self.font_top)
+        file_menu.add_command(label="Save", command=self.save, font=self.font_top)
+        file_menu.add_command(label="Save as...", command=self.save_as, font=self.font_top)
+        file_menu.add_command(label="Preferences", command=self.preference_window, font=self.font_top)
+        file_menu.add_command(label="Clear", command=self.clear, font=self.font_top)
         file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.exit)
+        file_menu.add_command(label="Exit", command=self.exit, font=self.font_top)
 
-        self.icb_menubar.add_cascade(label="File", menu=file_menu)
+        self.icb_menubar.add_cascade(label="File", menu=file_menu, font=self.font_top)
 
-        self.icb_menubar.add_cascade(label="Edit", menu=edit_menu)
+        edit_menu.add_command(label="Play", command=self.play, font=self.font_top)
+        edit_menu.add_command(label="Pause", command=self.pause, font=self.font_top)
+        edit_menu.add_command(label="Toggle", command=self.new, font=self.font_top)
+        edit_menu.add_command(label="Reset", command=self.reset, font=self.font_top)
+        self.icb_menubar.add_cascade(label="Run", menu=edit_menu, font=self.font_top)
 
-        help_menu.add_command(label="Help", command=self.help)
-        help_menu.add_command(label="About...", command=self.about)
+        help_menu.add_command(label="Help", command=self.help, font=self.font_top)
+        help_menu.add_command(label="About...", command=self.about, font=self.font_top)
 
-        self.icb_menubar.add_cascade(label="Help", menu=help_menu)
+        self.icb_menubar.add_cascade(label="Help", menu=help_menu, font=self.font_top)
 
         self.config(menu=self.icb_menubar)
 
@@ -1057,19 +1249,8 @@ class Application(Tk):
 
 
 if __name__ == "__main__":
-    app = Application(1366, 768)
+    app = Application(1600, 900)
     app.run()
-    #root = Tk()
-    #myframe = Frame(root)
-    #myframe.pack(fill=BOTH, expand=YES)
-    #mycanvas = ResizingCanvas(myframe, side_pane_width=0, width=850, height=400, bg="red", highlightthickness=0)
-    #mycanvas.pack(fill=BOTH, expand=YES)
-#
-    ## add some widgets to the canvas
-    #mycanvas.create_line(0, 0, 200, 100)
-    #mycanvas.create_line(0, 100, 200, 0, fill="red", dash=(4, 4))
-    #mycanvas.create_rectangle(50, 25, 150, 75, fill="blue")
-#
-    ## tag all of the drawn widgets
-    #mycanvas.addtag_all("all")
-    #root.mainloop()
+
+    # stop the thread when needed
+    # f_stop.set()
