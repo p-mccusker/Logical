@@ -6,9 +6,6 @@
 # Description:
 ########################################################################################################################
 # TODO:
-#   - Add clear button to reset circuit
-#   - Add button to add input src, method to modify these sources
-#   - Add clock input
 #   - Scrolling for canvas
 #   - Zoom In/Out
 #   - Save/Load
@@ -16,12 +13,12 @@
 ########################################################################################################################
 import tkinter
 from tkinter import *
+from tkinter import filedialog as fd
 import tkinter.font
 import tkinter.ttk as ttk
 import sys, threading, os
 from time import time
 from typing import *
-from heapq import *
 
 NULL = -1  # Value which represents a gate which has not received a valid input yet
 TRUE = int(True)
@@ -106,6 +103,24 @@ def get_logic_func_name(func) -> str:
     else:
         return "Unknown"
 
+
+def get_logic_func_from_name(name: str):
+    if name == "power":
+        return power
+    elif name == "logic_not":
+        return logic_not
+    elif name == "logic_and":
+        return logic_and
+    elif name == "logic_nand":
+        return logic_nand
+    elif name == "logic_or":
+        return logic_or
+    elif name == "logic_xor":
+        return logic_xor
+    elif name == "logic_clock":
+        return logic_clock
+    else:
+        return None
 
 # Global counter for each input object, gives each object a unique id
 IMG_FOLDER = "images"
@@ -468,7 +483,7 @@ class InputTk:
         #return "<InputTK {0} {1} {2}>".format(hex(id(self)), "func: " +
         #                                      self.func.__name__, "state: " +
         #                                      str(self.output()))
-        return "<{0} {1}>".format(get_logic_func_name(self.func), self.center)
+        return "{0},{1}".format(get_logic_func_name(self.func), self.center)
 
 
 class ClockTimer:
@@ -558,7 +573,7 @@ class ClockTk(InputTk):
 
     def __str__(self) -> str:
         #return "<ClockTK {0} {1} {2}>".format(hex(id(self)), "rate: " + str(self.rate), "state: " + str(self.output()))
-        return "<{0} {1} {2} {3}>".format(get_logic_func_name(self.func), self.rate, self.default_state, self.center)
+        return "{0},{1},{2},{3}".format(get_logic_func_name(self.func), self.center, self.rate, self.default_state)
 
 
 def connect_gates(src_gate: InputTk, dest_gate: InputTk) -> None:
@@ -740,6 +755,7 @@ class Application(Tk):
         self.height = height
         self.x = self.width / 2
         self.y = self.height / 2
+        # self.iconphoto = PhotoImage(file="circuit_icon.svg")
 
         self.title("Interactive Circuit Builder")
         self.geometry(str(self.width) + "x" + str(self.height))
@@ -768,7 +784,6 @@ class Application(Tk):
         self.font_top = tkinter.font.Font(family=self.font_family, size=11, weight=tkinter.font.NORMAL,
                                           slant=tkinter.font.ROMAN)
         self.font_prompt = self.default_font
-
         #############################
         # ICB Widgets ###############
         self.screen_icb = None
@@ -812,6 +827,7 @@ class Application(Tk):
         # Saving/Loading Vars #######
         self.filename = ""
         self.file_separator = "<--CONNECTIONS-->"
+        self.file_type = ".cir"
         #############################
 
     def input_gates_intersect(self, event: Event) -> (bool, Optional[InputTk]):
@@ -991,29 +1007,28 @@ class Application(Tk):
         pass
 
     def save(self):
-        self.filename = "gates.sav"
+        # self.filename = "gates" + self.file_type
         if self.filename == "":
             print("No save file has been specified")
             self.save_as()
-            return
+
         save_file = open(self.filename, 'w')
         if save_file is None:
-            print("Failed to open:", save_file)
-            raise OSError
+            raise OSError("Failed to open: " + self.filename)
 
         self.deselect_active_gates()
         self.reset()
         gates = []
 
-        for func in self.inputs.keys():
+        for func in self.inputs.keys():  # Create one list out of all gates
             for gate in self.inputs[func]:
                 gates.append(gate)
 
-        for idx, gate in enumerate(gates):
-            print(gate,  idx, file=save_file)
+        for idx, gate in enumerate(gates):  # For each gate, write the gate and its enumeration,which is used as its id
+            print("{0},{1}".format(gate, idx), file=save_file)
             gates[idx] = (gate, idx)
 
-        print(self.file_separator, file=save_file)
+        print(self.file_separator, file=save_file)  # Add seperator between the gates and their connections
 
         for (gate, cnt) in gates:
             in_gates = gate.get_input_gates()
@@ -1021,7 +1036,7 @@ class Application(Tk):
             in_gates_ids = []
             out_gates_ids = []
 
-            # For every input, find the gate in the master list and add its id number to the list, to reconstruct later
+            # Get the id of each input gate, store in list
             for in_gate in in_gates:
                 for other_gate in gates:
                     if other_gate[0] == in_gate:
@@ -1033,24 +1048,93 @@ class Application(Tk):
             for out_gate in out_gates:
                 for other_gate in gates:
                     if other_gate[0] == out_gate:
-                        print(other_gate[1])
+                        # print(other_gate[1])
                         out_gates_ids.append(other_gate[1])
                         break
 
-            # print(in_gates)
-            # print(out_gates)
-            print('[{0}] In: {1} Out: {2}'.format(cnt, in_gates_ids, out_gates_ids), file=save_file)
+            # Strip spaces from input and output gate lists to simplify reading
+            in_fmt = "[" if len(in_gates_ids) > 0 else "[]"
+            for idx, in_gate_id in enumerate(in_gates_ids):
+                if idx < len(in_gates_ids) - 1:
+                    in_fmt += str(in_gate_id) + "|"
+                else:
+                    in_fmt += str(in_gate_id) + "]"
+            print(in_fmt)
+            out_fmt = "[" if len(out_gates_ids) > 0 else "[]"
+            for idx, out_gate_id in enumerate(out_gates_ids):
+                if idx < len(out_gates_ids) - 1:
+                    out_fmt += str(out_gate_id) + "|"
+                else:
+                    out_fmt += str(out_gate_id) + "]"
+            # print(out_fmt)
+            print('{0},{1},{2}'.format(cnt, in_fmt, out_fmt), file=save_file)
 
         save_file.close()
 
-    def open(self):
-        pass
-
     def save_as(self):
-        pass
+        # using with statement
+        self.filename = fd.asksaveasfilename(initialfile=self.filename,
+                                             filetypes=[("Circuit Diagram", "*" + self.file_type)])
+
+    def open(self):
+        self.filename = fd.askopenfilename(filetypes=[("Circuit Diagram", "*" + self.file_type)])
+        print(self.filename)
+        if self.filename == "":
+            return
+
+        load_file = open(self.filename, 'r')
+        if load_file is None:
+            raise FileNotFoundError("Unable to open: " + self.filename)
+
+        self.clear()
+
+        file_lines = load_file.readlines()
+        connection_start_index = -1
+        for idx, line in enumerate(file_lines):  # Load every gate into the canvas
+            if line.strip() == self.file_separator:
+                connection_start_index = idx + 1
+                break
+
+            line_list = line.strip('\n').split(sep=',')
+            # line_list[0]: Function Name
+            # line_list[1]: Center X of Gate on canvas
+            # line_list[2]: Center Y of Gate on canvas
+            # line_list[-1]: Gate Num
+            gate_func = get_logic_func_from_name(line_list[0])
+            # Strip parenthesis and space from center str, then split
+            gate_num = int(line_list[-1])
+            gate_inst = len(self.inputs[gate_func]) + 1
+            position_x = int(line_list[1].strip("("))
+            position_y = int(line_list[2].strip(") "))
+            gate_center = (position_x, position_y)
+            gate = None
+            if gate_func == logic_clock:  # If this input is clock, it has a different format
+                # line_list[3]: Default Value
+                # line_list[4]: Update Rate
+                # line_list[5]: gate number
+                gate = ClockTk(update_rate=float(line_list[4]), label="Clock #" + str(gate_inst),
+                               canvas=self.screen_icb, center=gate_center, default_state=int(line_list[5]))
+            else:  # Otherwise all the other gates have the same format
+                gate = InputTk(func=gate_func, label=gate_func.__name__ + "#" + str(gate_inst), canvas=self.screen_icb,
+                               center=gate_center)
+
+            self.inputs[gate_func].append(gate)
+
+        file_lines = file_lines[connection_start_index:]
+        # print(file_lines)
+
+        for connection_line in file_lines:
+            connection_line = connection_line.strip()
+            line_list = connection_line.split(sep=',')
+            curr_gate_id = int(line_list[0])
+            # Read gate inputs
+            # Find input gates based on gate num
+            inputs_list = line_list[1].strip()
+
 
     def clear(self):
         self.deselect_active_gates()
+        self.reset()
         self.is_edit_table.clear()
         print(self.is_edit_table.entries)
 
@@ -1241,7 +1325,8 @@ class Application(Tk):
         self.timer_state_cb = Checkbutton(cb_frame, variable=self.timer_state_intvar, font=self.default_font)
         self.timer_state_cb.grid(row=0, column=1, padx=(0, 0), pady=(0, 0), sticky=W)
 
-        self.timer_done_button = Button(self.timer_labelframe, text="Done", command=self.close_timer_popup, font=self.default_font)
+        self.timer_done_button = Button(self.timer_labelframe, text="Done", command=self.close_timer_popup,
+                                        font=self.default_font)
         self.timer_done_button.grid(row=2, column=0)
         self.wait_window(self.timer_popup)
 
