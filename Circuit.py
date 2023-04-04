@@ -16,11 +16,12 @@
 ########################################################################################################################
 import tkinter
 from tkinter import *
-from  tkinter import font
+import tkinter.font
 import tkinter.ttk as ttk
-import sys, threading, copy, os
+import sys, threading, os
 from time import time
 from typing import *
+from heapq import *
 
 NULL = -1  # Value which represents a gate which has not received a valid input yet
 TRUE = int(True)
@@ -42,39 +43,39 @@ def logic_not(value: list[int]) -> int:
     return int(not value[0]) if value[0] != NULL else NULL
 
 
-def logic_and(inps: list[int]) -> int:
-    if len(inps) < 2 or list_contains(inps, NULL)[0]:
+def logic_and(input_gates: list[int]) -> int:
+    if len(input_gates) < 2 or list_contains(input_gates, NULL)[0]:
         return NULL
 
     result = TRUE
-    for val in inps:
+    for val in input_gates:
         result &= val
     return result
 
 
-def logic_nand(inps: list[int]) -> int:
-    ret = logic_and(inps)
+def logic_nand(input_gates: list[int]) -> int:
+    ret = logic_and(input_gates)
     return not ret if ret != NULL else NULL
 
 
-def logic_or(inps: list[int]) -> int:
-    if len(inps) < 2 or list_contains(inps, NULL)[0]:
+def logic_or(input_gates: list[int]) -> int:
+    if len(input_gates) < 2 or list_contains(input_gates, NULL)[0]:
         return NULL
 
     result = FALSE
-    for val in inps:
+    for val in input_gates:
         result |= val
     return result
 
 
-def logic_xor(inps: list[int]) -> int:
+def logic_xor(input_gates: list[int]) -> int:
     """(A XOR B) OR (B XOR C) OR ...(n XOR n+1)"""
-    if len(inps) < 2 or list_contains(inps, NULL)[0]:
+    if len(input_gates) < 2 or list_contains(input_gates, NULL)[0]:
         return NULL
 
     result = FALSE
-    for i in range(len(inps)):
-        result |= (inps[i-1] ^ inps[i])
+    for i in range(len(input_gates)):
+        result |= (input_gates[i-1] ^ input_gates[i])
     return result
 
 
@@ -85,6 +86,25 @@ def logic_clock(gate) -> int:
         gate.toggle()
 
     return gate.output()
+
+
+def get_logic_func_name(func) -> str:
+    if func == power:
+        return "power"
+    elif func == logic_not:
+        return "logic_not"
+    elif func == logic_and:
+        return "logic_and"
+    elif func == logic_nand:
+        return "logic_nand"
+    elif func == logic_or:
+        return "logic_or"
+    elif func == logic_xor:
+        return "logic_xor"
+    elif func == logic_clock:
+        return "logic_clock"
+    else:
+        return "Unknown"
 
 
 # Global counter for each input object, gives each object a unique id
@@ -132,6 +152,7 @@ def get_all_input_imgs(output: Optional[list[PhotoImage]] = None) -> Optional[li
 
 
 class Input:
+    """Class to test basic gate functionality"""
     def __init__(self, func, ins: Optional[list] = None, out: int = NULL):
         self.func = func
         self.inputs = ins if ins is not None else []
@@ -178,10 +199,10 @@ def test_half_adder():
         xor = Input(logic_xor, ins=[in1, in2])
         and_gate = Input(logic_and, ins=[in1, in2])
 
-        sum = xor.output()
+        sum1 = xor.output()
         carry = and_gate.output()
         print("Inputs:", input_list)
-        print("Sum: {0} Carry: {1}".format(int(sum), int(carry)))
+        print("Sum: {0} Carry: {1}".format(int(sum1), int(carry)))
 
 
 def test_full_adder():
@@ -207,11 +228,11 @@ def test_full_adder():
 
         or1 = Input(logic_or, ins=[and1, and2])
 
-        sum = xor2.output()
+        sum1 = xor2.output()
         carry = or1.output()
 
         print("Inputs:", input_list)
-        print("Sum: {0} Carry: {1}".format(int(sum), int(carry)))
+        print("Sum: {0} Carry: {1}".format(int(sum1), int(carry)))
 
 
 def get_line_fill(value: int) -> str:
@@ -228,7 +249,7 @@ class InputTk:
                  center: (int, int) = (NULL, NULL), ins: Optional[list] = None,
                  out: int = NULL):
         self.func = func
-        self.label = label
+        self.label = label  # Gate Name
         self.inputs = ins if ins is not None else []
         self.out = out
         self.output_gates = []
@@ -341,10 +362,10 @@ class InputTk:
             self.inputs.remove(inp)
             self.remove_line(self.input_line_ids[gate_index])
 
-    def remove_output(self, dest):
-        contains, gate_index = list_contains(self.output_gates, dest)
+    def remove_output(self, destination):
+        contains, gate_index = list_contains(self.output_gates, destination)
         if contains:
-            self.output_gates.remove(dest)
+            self.output_gates.remove(destination)
             self.remove_line(self.output_line_ids[gate_index])
 
     def remove_connection(self, other, self_is_parent: bool) -> None:
@@ -444,10 +465,14 @@ class InputTk:
         return self.center[0] + self.get_width() // 2, self.center[1] + self.get_height() // 2
 
     def __str__(self) -> str:
-        return "<InputTK {0} {1} {2}>".format(hex(id(self)), "func: " + self.func.__name__, "state: " + str(self.output()))
+        #return "<InputTK {0} {1} {2}>".format(hex(id(self)), "func: " +
+        #                                      self.func.__name__, "state: " +
+        #                                      str(self.output()))
+        return "<{0} {1}>".format(get_logic_func_name(self.func), self.center)
 
 
 class ClockTimer:
+    """Asynchronous Timer for a clock object"""
     def __init__(self, func, rate, gate):
         self.startTime = 0
         self.endTime = 0
@@ -532,12 +557,13 @@ class ClockTk(InputTk):
         self.first_run = False
 
     def __str__(self) -> str:
-        return "<ClockTK {0} {1} {2}>".format(hex(id(self)), "rate: " + str(self.rate), "state: " + str(self.output()))
+        #return "<ClockTK {0} {1} {2}>".format(hex(id(self)), "rate: " + str(self.rate), "state: " + str(self.output()))
+        return "<{0} {1} {2} {3}>".format(get_logic_func_name(self.func), self.rate, self.default_state, self.center)
 
 
 def connect_gates(src_gate: InputTk, dest_gate: InputTk) -> None:
     # Only allow one input to a not gate
-    # Clocks can only be outputs, so return if one is set as a destination gate
+    # Clocks/Power sources can only be outputs, so return if one is set as a destination gate
     if (is_not_gate(dest_gate) and len(dest_gate.get_input_gates()) == 1) or is_clock(dest_gate):
         return
 
@@ -569,9 +595,13 @@ def is_not_gate(gate: InputTk) -> bool:
     return gate.get_func() == logic_not
 
 
-def is_clock(gate) -> bool:
+def is_clock(gate: InputTk) -> bool:
     # return gate.get_func() == logic_clock
     return isinstance(gate, ClockTk)
+
+
+def gate_id(gate: InputTk) -> int:
+    return gate.get_id()
 
 
 def connection_exists(gate1: InputTk, gate2: InputTk) -> bool:
@@ -779,6 +809,10 @@ class Application(Tk):
         self.timer_entry_strvar = StringVar(value=str(self.default_update_rate))  # Value of the timer update rate
         self.timer_done_button = None  # Button to close window
         #############################
+        # Saving/Loading Vars #######
+        self.filename = ""
+        self.file_separator = "<--CONNECTIONS-->"
+        #############################
 
     def input_gates_intersect(self, event: Event) -> (bool, Optional[InputTk]):
         img1_center_x, img1_center_y = event.x, event.y
@@ -863,10 +897,12 @@ class Application(Tk):
             if len(self.icb_selected_gates) == 0:
                 first_gate.add_rect()
                 self.icb_selected_gates.append(first_gate)
-            elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] != first_gate:  # Gate is already selected and the second gate is different from the first
+            elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] != first_gate:
+                # Gate is already selected and the second gate is different from the first
                 connect_gates(self.icb_selected_gates[0], first_gate)
                 self.deselect_active_gates()
-            elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] == first_gate:  # Gate is already selected and the second gate is the same as the first
+            elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] == first_gate:
+                # Gate is already selected and the second gate is the same as the first
                 if is_clock(first_gate):
                     self.selected_timer = first_gate
                     self.timer_prompt()
@@ -955,7 +991,57 @@ class Application(Tk):
         pass
 
     def save(self):
-        pass
+        self.filename = "gates.sav"
+        if self.filename == "":
+            print("No save file has been specified")
+            self.save_as()
+            return
+        save_file = open(self.filename, 'w')
+        if save_file is None:
+            print("Failed to open:", save_file)
+            raise OSError
+
+        self.deselect_active_gates()
+        self.reset()
+        gates = []
+
+        for func in self.inputs.keys():
+            for gate in self.inputs[func]:
+                gates.append(gate)
+
+        for idx, gate in enumerate(gates):
+            print(gate,  idx, file=save_file)
+            gates[idx] = (gate, idx)
+
+        print(self.file_separator, file=save_file)
+
+        for (gate, cnt) in gates:
+            in_gates = gate.get_input_gates()
+            out_gates = gate.get_output_gates()
+            in_gates_ids = []
+            out_gates_ids = []
+
+            # For every input, find the gate in the master list and add its id number to the list, to reconstruct later
+            for in_gate in in_gates:
+                for other_gate in gates:
+                    if other_gate[0] == in_gate:
+                        print(other_gate[1])
+                        in_gates_ids.append(other_gate[1])
+                        break
+
+            # For every output, find the gate in the master list and add its id number to the list, to reconstruct later
+            for out_gate in out_gates:
+                for other_gate in gates:
+                    if other_gate[0] == out_gate:
+                        print(other_gate[1])
+                        out_gates_ids.append(other_gate[1])
+                        break
+
+            # print(in_gates)
+            # print(out_gates)
+            print('[{0}] In: {1} Out: {2}'.format(cnt, in_gates_ids, out_gates_ids), file=save_file)
+
+        save_file.close()
 
     def open(self):
         pass
@@ -1002,7 +1088,6 @@ class Application(Tk):
 
     def reset(self, event: Optional[Event] = None):
         """Resets the timers in the program"""
-        print("reset")
         Application.clocks_paused = True
         for clock in self.inputs[logic_clock]:
             clock.stop()
@@ -1251,6 +1336,3 @@ class Application(Tk):
 if __name__ == "__main__":
     app = Application(1600, 900)
     app.run()
-
-    # stop the thread when needed
-    # f_stop.set()
