@@ -11,11 +11,16 @@
 #   - Save/Load
 #
 ########################################################################################################################
+import os
 from tkinter import filedialog as fd
 import tkinter.font as font
 import tkinter.ttk as ttk
 import sys
 from inputtk import *
+
+
+def capitalize(string: str) -> str:
+    return string[0].upper() + string[1:]
 
 
 def point_in_rect(x, y, tl: (int, int), br: (int, int)):
@@ -42,14 +47,14 @@ class TableCheckbutton(Frame):
     def __init__(self, parent: Optional[Widget], gate, return_focus_to: Widget, this_font: font.Font, *args,
                  checkbutton_padding: Optional[dict] = None,
                  **kwargs):  # Maybe add padding option for label
-        super().__init__(parent, *args, bg="white", **kwargs)
+        super().__init__(parent, *args, background="white", **kwargs)
         self.gate = gate
         self.return_focus_to = return_focus_to
         if gate is not None:
             self.check_var = IntVar(value=gate.output())
             self.checkbutton = Checkbutton(self, variable=self.check_var, text=self.gate.get_label(),
                                            onvalue=TRUE, offvalue=FALSE, width=10, command=self.click_cb,
-                                           font=this_font)
+                                           background='white', font=this_font)
             if checkbutton_padding is not None:
                 self.checkbutton.grid(row=0, column=0, **checkbutton_padding)
             else:
@@ -77,7 +82,7 @@ class CheckbuttonTable(LabelFrame):
         self.checkbox_padding = {"padx": (20, 5), "pady": (5, 5)}
         self.return_focus_to = return_focus_to
         self.entries = []  # List holding list of TableCheckbutton
-        self.empty_text_label = Label(self, bg="white", text="You have no inputs...",
+        self.empty_text_label = Label(self, bg="white", text="No inputs...",
                                       font=this_font)
         self.font_sz = this_font.cget("size")
         self.font_family = this_font.cget("family")
@@ -144,7 +149,7 @@ class LabeledEntry(Frame):
         self.label = Label(self, text=label_text)
         self.label.grid(row=0, column=0)
         self.entry_var = StringVar(value=entry_text) if entry_var is None else entry_var
-        self.entry = Entry(self, textvariable=self.entry_var)
+        self.entry = Entry(self, textvariable=self.entry_var, background='white')
         if entry_width is not None:
             self.entry.config(width=entry_width)
         if widget_font is not None:
@@ -166,38 +171,12 @@ class LabeledEntry(Frame):
         return self.entry_var.get()
 
 
-class BorderedSideFrame(Frame):
-    def __init__(self, side: str, border_width: int, border_fill: str = "black", inner_color: str = "white", *args, **kwargs):
-        Frame.__init__(self, *args, background=border_fill, **kwargs)
-        self.inner_frame = None
-        self.propagate(False)  # prevent frame from auto-fitting to contents
-        side = side.lower()
-        if side in ['left', 'right']:
-            # self.border_frame = Frame(self, background=border_fill, width=border_width, height=self.winfo_height())
-            self.inner_frame = Frame(self, background=inner_color, width=self.winfo_width() - border_width, height=self.winfo_height())
-            if side == 'left':
-                # self.border_frame.grid(row=0, column=0)
-                self.inner_frame.grid(padx=(border_width, 0))
-            else:
-                # self.border_frame.grid(row=0, column=1)
-                self.inner_frame.grid(padx=(border_width, 0))
-        elif side in ['up', 'down']:
-            # self.border_frame = Frame(self, background=border_fill, width=self.winfo_reqwidth(), height=border_width)
-            self.inner_frame = Frame(self, background=inner_color, width=self.winfo_reqwidth(), height=self.winfo_reqheight() - border_width)
-            if side == 'up':
-                # self.border_frame.grid(row=0, column=0)
-                self.inner_frame.grid(pady=(border_width, 0))
-            else:
-                # self.border_frame.grid(row=1, column=0)
-                self.inner_frame.grid(pady=(0, border_width))
-
-
 class Application(Tk):
     img_width = 100
     img_height = 50
     max_selectable_gates = 100
     border_width = 3  # Width of border separating canvas from the right pane
-    input_selection_screen_width = 180  # Width of the right pane
+    input_selection_screen_width = 200  # Width of the right pane
     bg_colors = ["white", "black", "red", "green", "blue", "cyan", "yellow", "magenta"]
     # Fonts #####################
     font_family = "Helvetica"
@@ -239,7 +218,6 @@ class Application(Tk):
         # prematurely
         self.imgs = get_all_input_imgs()
         self.default_update_rate = 2  # Default Update for a new clock in seconds, default to 2s
-        self.update_lines = False  # Set to true when a new gate/power source is added/changed to redraw lines
 
         # Dictionary to hold the input gates, where the gate type is the key and the value is the list of gates
         self.inputs = {}
@@ -295,7 +273,8 @@ class Application(Tk):
         self.filename = ""
         self.file_separator = "<--CONNECTIONS-->"
         self.file_type = ".cir"
-        self.open_filename = ""
+        self.tmp_filename = "tmp" + self.file_type
+
         #############################
         # Preference Vars ###########
         self.font_families = list(font.families())
@@ -562,8 +541,8 @@ class Application(Tk):
             out_fmt = out_fmt[:-1] + ']'
 
             print('{0},{1},{2}'.format(cnt, in_fmt, out_fmt), file=save_file)
+            # save_file.close()
 
-        save_file.close()
 
     def save_as(self):
         """Create save file prompt and set self.filename to this file"""
@@ -583,9 +562,7 @@ class Application(Tk):
         """"Load circuit from file"""
         open_filename = ""  # If open called from menu, ask for prompt, if it has been called to open a temp file,
         # use that name
-        print("open()")
         if self.open_filename == "":
-            print("self.open_filename == ")
             self.filename = fd.askopenfilename(filetypes=[("Circuit Diagram", "*" + self.file_type)])
             open_filename = self.filename
         else:
@@ -593,7 +570,7 @@ class Application(Tk):
 
         if open_filename == "":
             return
-        print("Loading:", open_filename)
+
         load_file = open(open_filename, 'r')
         if load_file is None:
             raise FileNotFoundError("Unable to open: " + open_filename)
@@ -630,7 +607,7 @@ class Application(Tk):
                 gate = ClockTk(update_rate=float(line_list[4]), label="Clock #" + str(gate_inst),
                                canvas=self.screen_icb, center=gate_center, default_state=int(line_list[5]))
             else:  # Otherwise all the other gates have the same format
-                gate = InputTk(func=gate_func, label=gate_func.__name__ + " #" + str(gate_inst), canvas=self.screen_icb,
+                gate = InputTk(func=gate_func, label=capitalize(gate_func.__name__ + " #" + str(gate_inst)), canvas=self.screen_icb,
                                center=gate_center, out=gate_out, dims=(95, 45) if gate_func == output else (0, 0))
                 if is_power_gate(gate):
                     self.is_edit_table.add_entry(gate)
@@ -674,10 +651,15 @@ class Application(Tk):
                         connect_gates(current_gate, gate)
                         break
 
+        load_file.close()
+
     def open_temp(self):
+        """Loads the temp file saved on program rebuild and deletes it"""
         print("open_temp")
         self.open_filename = "tmp" + self.file_type
         self.open()
+
+        os.remove(self.open_filename)
         self.open_filename = ""
 
     def clear(self):
@@ -784,7 +766,8 @@ class Application(Tk):
 
     def gui_build_icb(self) -> None:
         """Builds the canvas for the gates to exist on and create all the key bindings"""
-        self.screen_icb = Canvas(self, width=self.width, height=self.height, bg='white', highlightthickness=0)
+        self.screen_icb = Canvas(self, width=self.width, height=self.height, background=self.background_color.get(),
+                                 highlightthickness=0)
         self.screen_icb.grid(row=0, column=0, sticky="NESW")
         self.screen_icb.bind('<Motion>', self.motion_cb)
         self.screen_icb.bind('<Button-1>', self.left_click_cb)
@@ -806,19 +789,15 @@ class Application(Tk):
 
     def gui_build_input_selection_menu(self) -> None:
         """Build the side pane: the power table and gate buttons"""
-
-        self.border_width = 3
-        #self.screen_is = BorderedSideFrame(master=self, side='left', border_width=self.border_width, border_fill='black',
-        #                                   height=self.screen_is_height)
-        # self.input_selection_screen_width = 200 #self.screen_is.winfo_reqwidth()
         self.bordered_frame = Frame(self, background='black', width=self.input_selection_screen_width, height=self.height)
         self.bordered_frame.grid(row=0, column=1)
-        self.bordered_frame.grid_propagate(False)
-        print(self.bordered_frame.winfo_reqwidth(), self.bordered_frame.winfo_width())
-        self.screen_is = Frame(self.bordered_frame, background=self.background_color.get(),
+        self.bordered_frame.grid_propagate(True)
+
+        self.screen_is = Frame(self.bordered_frame, background='white',
                                width=self.input_selection_screen_width - self.border_width, height=self.height)
         self.screen_is.grid(padx=(self.border_width, 0), sticky="nse",)
         self.screen_is.grid_propagate(False)
+
         self.geometry(str(self.width + self.input_selection_screen_width) + "x" + str(self.height))
 
         # Add table to this side pane
@@ -830,7 +809,7 @@ class Application(Tk):
         self.is_edit_table.grid(column=0, row=0, sticky="ns", **table_padding)
         # Add gate buttons #############################################################################################
         self.is_button_frame = Frame(self.screen_is, bg="white", )
-        self.is_button_frame.grid(column=0, row=1, sticky='nesw', padx=(30, 0), pady=(10, 0))
+        self.is_button_frame.grid(column=0, row=1, sticky='nesw', padx=(20, 0), pady=(10, 0))
         # self.is_button_frame.grid_propagate(False)
 
         # Create list of all function that are to be bound to buttons
@@ -889,11 +868,15 @@ class Application(Tk):
 
     def gui_reconfig_dimensions(self):
         """Updates the width and height of the application"""
-        self.geometry(str(self.width) + "x" + str(self.height))
+        self.screen_is.config(height=self.height)
         self.screen_icb.config(width=self.width-self.input_selection_screen_width, height=self.height)
-        self.screen_is.config(width=self.input_selection_screen_width, height=self.height)
-        self.is_edit_table.config(width=self.input_selection_screen_width - self.border_width, height=self.height / 3)
-        self.is_button_frame.config(height=self.height)
+        self.geometry(str(self.width) + "x" + str(self.height))
+
+    def toggle_line_colors(self) -> None:
+        InputTk.line_colors_on = not InputTk.line_colors_on
+        for func in self.inputs.keys():
+            for gate in self.inputs[func]:
+                gate.update_line_colors()
 
     def preference_prompt(self):
         """ Resolution: 2 Entries
@@ -912,29 +895,40 @@ class Application(Tk):
         res_frame = Frame(self.preference_toplevel)
         res_frame.pack(side=TOP, expand=True, fill=BOTH)
         res_label = Label(res_frame, text=" Set Resolution:", font=self.active_font)
-        res_label.pack(side=LEFT)
+        res_label.pack(side=LEFT, padx=(5, 0), pady=(10, 5))
 
         self.res_width_var = StringVar(value=str(self.winfo_width()))
         self.res_width_entry = Entry(res_frame, textvariable=self.res_width_var, font=self.active_font, width=4)
-        self.res_width_entry.pack(side=LEFT)
+        self.res_width_entry.pack(side=LEFT, padx=(5, 0), pady=(0, 0))
 
         res_sep_label = Label(res_frame, text="x", font=self.active_font)
-        res_sep_label.pack(side=LEFT)
+        res_sep_label.pack(side=LEFT, padx=(5, 5), pady=(0, 0))
 
         self.res_height_var = StringVar(value=str(self.winfo_height()))
         self.res_height_entry = Entry(res_frame, textvariable=self.res_height_var, font=self.active_font, width=4)
-        self.res_height_entry.pack(side=LEFT)
+        self.res_height_entry.pack(side=LEFT, padx=(0, 0), pady=(0, 0))
         # Color Preferences ############################################################################################
         color_frame = Frame(self.preference_toplevel)
-        color_frame.pack(side=TOP)
+        color_frame.pack(side=TOP, expand=True, fill=BOTH, padx=(0, 0), pady=(0, 5))
 
         self.color_labelentry = LabeledEntry(master=color_frame, entry_width=7,
-                                             label_text="Background color (string or hex code):",
-                                             entry_var=self.background_color, widget_font=self.active_font)
-        self.color_labelentry.pack(side=LEFT)
+                                             label_text="Canvas color (name or #XXXXXX):",
+                                             entry_text=self.background_color.get(), widget_font=self.active_font)
+        self.color_labelentry.pack(side=LEFT, padx=(10, 0), pady=(5, 5))
+        # Toggle Line Colors ###########################################################################################
+        line_colors_frame = Frame(self.preference_toplevel)
+        line_colors_frame.pack(side=TOP, expand=True, fill=BOTH, padx=(12, 0), pady=(0, 5))
+
+        line_colors_label = Label(line_colors_frame, text="Enable Line Colors:", font=self.active_font)
+        line_colors_label.pack(side=LEFT)
+
+        self.line_colors_checkbox = Checkbutton(line_colors_frame,
+                                                command=self.toggle_line_colors, font=self.active_font)
+        self.line_colors_checkbox.select()
+        self.line_colors_checkbox.pack(side=LEFT)
         # Font Preferences #############################################################################################
         font_frame = Frame(self.preference_toplevel)
-        font_frame.pack(side=TOP, padx=(15, 15))
+        font_frame.pack(side=TOP, padx=(15, 15), pady=(0, 5))
         # Font Family ##################################################################################################
         font_family_frame = Frame(font_frame)
         font_family_frame.pack(side=LEFT)
@@ -956,7 +950,7 @@ class Application(Tk):
         # Font Size ####################################################################################################
         font_sizes = ['10', '11', '12', '13', '14']
         font_size_frame = Frame(font_frame)
-        font_size_frame.pack(side=RIGHT)
+        font_size_frame.pack(side=RIGHT, fill=BOTH)
         font_size_label = Label(font_size_frame, text="Font Size", font=self.active_font)
         font_size_label.pack(side=TOP)
         self.font_size_listbox = Listbox(font_size_frame, font=self.active_font, height=len(font_sizes),
@@ -965,7 +959,7 @@ class Application(Tk):
         for font_size in font_sizes:
             self.font_size_listbox.insert(END, font_size)
 
-        self.font_size_listbox.pack(side=LEFT, expand=False, fill=X)
+        self.font_size_listbox.pack(side=LEFT, expand=True, fill=BOTH)
         font_size_scrollbar = Scrollbar(font_size_frame)
         font_size_scrollbar.pack(side=RIGHT, fill=BOTH)
 
@@ -984,22 +978,31 @@ class Application(Tk):
     def close_preference_prompt(self) -> None:
         # Update settings...
         # Needs work
+
         width, height = int(self.res_width_var.get()), int(self.res_height_var.get())
-        if width >= 800 and height >= 600 and (self.width != width or self.height != height):
+        if width >= 800 and height >= 600:
             self.width = int(self.res_width_entry.get())
             self.height = int(self.res_height_entry.get())
             self.gui_reconfig_dimensions()
         else:
             print("[WARNING]: Resolution must be at least 800x600")
 
+        self.background_color = self.color_labelentry
         self.screen_icb.config(background=self.background_color.get())
 
         # Set active font
-        family = self.font_family_listbox.get(self.font_family_listbox.curselection()[0])
-        size = int(self.font_size_listbox.get(self.font_size_listbox.curselection()[0]))
-        self.update_font(family, size)
+        # If a font family was selected by the list box, get as a list and use as an index to get the font family
+        family = self.font_family_listbox.curselection()
+        print(family)
+        if family != ():
+            self.font_family = self.font_family_listbox.get(family[0])
 
-        print(family, size)
+        size = self.font_size_listbox.curselection()
+        if size != ():
+            self.font_size = int(self.font_size_listbox.get(size[0]))
+
+        if family != () and size != ():  # If either font family/size change, update app font and rebuild app
+            self.update_font(self.font_family, self.font_size)
 
         # Reset popup state
         self.preference_toplevel.grab_release()

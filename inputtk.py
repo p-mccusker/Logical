@@ -139,9 +139,9 @@ def get_all_input_imgs(output: Optional[list[PhotoImage]] = None) -> Optional[li
 
     return [get_input_img(input_src) for input_src in INPUT_GATES]
 
-
+"""
+######################### Testing Class ################################################################################
 class Input:
-    """Class to test basic gate functionality"""
     def __init__(self, func, ins: Optional[list] = None, out: int = NULL):
         self.func = func
         self.inputs = ins if ins is not None else []
@@ -222,10 +222,11 @@ def test_full_adder():
 
         print("Inputs:", input_list)
         print("Sum: {0} Carry: {1}".format(int(sum1), int(carry)))
+"""
 
 
 def get_line_fill(value: int) -> str:
-    if value == NULL:
+    if value == NULL or not bool(InputTk.line_colors_on):
         return InputTk.line_fill_null
     elif value == TRUE:
         return InputTk.line_fill_true
@@ -234,6 +235,7 @@ def get_line_fill(value: int) -> str:
 
 
 class InputTk:
+    line_colors_on = True
     line_fill_true = "green"
     line_fill_false = "red"
     line_fill_null = "black"
@@ -317,13 +319,19 @@ class InputTk:
         return self.output_gates
 
     def update_line_colors(self) -> None:
-        fill = get_line_fill(self.output())
+        output_val = self.output()
+        fill = get_line_fill(output_val)
         if is_output_gate(self):
+            # If line colors are off, still color output gate
+            if not InputTk.line_colors_on:
+                fill = self.line_fill_true if output_val is TRUE else self.line_fill_false \
+                    if output_val is FALSE else self.line_fill_null
+
             self.canvas.itemconfig(self.input_id, outline=fill)
+
         for i in range(len(self.output_line_ids)):
             self.canvas.itemconfig(self.output_line_ids[i], fill=fill)
             self.output_gates[i].update_line_colors()
-
 
     def add_rect(self) -> int:
         if self.rect_id < 0:
