@@ -34,6 +34,12 @@ class TableCheckbutton(Frame):
     def get(self) -> int:
         return self.check_var.get()
 
+    def set_font(self, font: font.Font) -> None:
+        self.checkbutton.config(font=font)
+
+    def set_focus_widget(self, widget: Widget):
+        self.return_focus_to = widget
+
 
 class CheckbuttonTable(LabelFrame):
     def __init__(self, parent, title: str, return_focus_to: Widget, this_font: font.Font, *args,  **kwargs):
@@ -89,9 +95,13 @@ class CheckbuttonTable(LabelFrame):
                 self.del_entry(i)
                 return
 
+    def set_focus_widget(self, widget: Widget):
+        self.return_focus_to = widget
+        for entry in self.entries:
+            entry.set_focus_widget(widget)
+
     def clear(self) -> None:
         for entry in self.entries:
-            print(entry)
             entry.grid_forget()
             entry.destroy()
 
@@ -99,6 +109,18 @@ class CheckbuttonTable(LabelFrame):
 
         self.empty_text_label.grid()
         self.null = True
+
+    def set_font(self, new_font: font.Font):
+        self.font_sz = new_font.cget("size")
+        self.font_family = new_font.cget("family")
+        self.font_weight = new_font.cget("weight")
+        self.font_slant = new_font.cget("slant")
+        self.entry_font = font.Font(family=self.font_family, size=self.font_sz-2, weight=self.font_weight,
+                                    slant=self.font_slant)
+        self.config(font=new_font)
+        self.empty_text_label.config(font=new_font)
+        for entry in self.entries:
+            entry.set_font(self.entry_font)
 
 
 class LabeledEntry(Frame):
@@ -125,6 +147,10 @@ class LabeledEntry(Frame):
 
     def set_entry_padding(self, **kwargs) -> None:
         self.entry.grid(**kwargs)
+
+    def set_font(self, font: font.Font) -> None:
+        self.entry.config(font=font)
+        self.label.config(font=font)
 
     def get(self) -> str:
         return self.entry_var.get()

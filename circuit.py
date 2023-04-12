@@ -19,7 +19,7 @@ import tomlkit
 
 
 def capitalize(string: str) -> str:
-
+    """Capitalizes the first letter of a string"""
     return string[0].upper() + string[1:]
 
 
@@ -49,7 +49,7 @@ class Application(Tk):
     img_height = 50
     max_selectable_gates = 100
     border_width = 3  # Width of border separating canvas from the right pane
-    input_selection_screen_width = None  # Width of the right pane
+    input_selection_screen_width = 175  # Width of the right pane
     bg_colors = ["white", "black", "red", "green", "blue", "cyan", "yellow", "magenta"]
     # Fonts #####################
     font_family = "Helvetica"
@@ -82,6 +82,8 @@ class Application(Tk):
             os.chmod(self.save_path, 0o744)
         os.umask(old_mask)
 
+        self.preference_file_name = os.path.join(self.preference_path, self.preference_file_name)
+
         # Parse command line arguments
         for i, arg in enumerate(sys.argv):
             if arg == '-w':
@@ -92,7 +94,7 @@ class Application(Tk):
             if arg == '-h':
                 height = int(sys.argv[i + 1])
                 if height < 600:
-                    log_msg(ERROR, sys.argv[i + 1], ": height must be an integer >", ValueError)
+                    log_msg(ERROR, sys.argv[i + 1] + ": height must be an integer >", ValueError)
 
         self.width = width
         self.height = height
@@ -166,7 +168,7 @@ class Application(Tk):
         self.file_separator = "<--CONNECTIONS-->"
         self.file_type = ".cir"
         self.tmp_filename = "tmp" + self.file_type
-
+        self.open_filename = ""
         #############################
         # Preference Vars ###########
         self.font_families = list(font.families())
@@ -174,48 +176,23 @@ class Application(Tk):
         #############################
 
     def update_font(self, family: str, size: int) -> None:
-        print("update_font")
         self.font_family = family
         self.font_size = size
         self.active_font = font.Font(family=self.font_family, size=self.font_size, weight=font.NORMAL,
                                      slant=font.ROMAN)
         self.font_top = font.Font(family=self.font_family, size=self.font_size - 1, weight=font.NORMAL,
                                   slant=font.ROMAN)
-        print(self.active_font)
 
-        self.save_temp()
-        self.reset_gui()
-        self.open_temp()
+        # self.save_temp()
+        self.gui_build_top_menu()
+        self.is_edit_table.set_font(self.active_font)
+        self.is_edit_table.set_focus_widget(self.screen_icb)
+
+        # self.open_temp()
 
     def reset_gui(self) -> None:
+        """Resets the gui on a significant change, such as a font change"""
         self.clear()
-
-        self.screen_is.grid_forget()
-        self.screen_is.update()
-
-        self.is_edit_table.clear()
-        self.is_edit_table.grid_forget()
-        self.is_edit_table.destroy()
-        self.is_edit_table.update()
-
-        self.bordered_frame.grid_forget()
-        self.bordered_frame.update()
-
-        self.screen_is.grid_forget()
-        self.screen_is.update()
-
-        self.is_button_frame.grid_forget()
-        self.is_button_frame.update()
-
-        for (btn, frm) in self.is_buttons:
-            frm.grid_forget()
-            frm.update()
-            btn.grid_forget()
-            btn.update()
-
-        self.reset(None)
-        self.update()
-
         self.gui_build_all()
 
     def input_gates_intersect(self, event: Event) -> (bool, Optional[InputTk]):
@@ -326,7 +303,7 @@ class Application(Tk):
             return
 
         intersects, gates = self.intersects_input_gate(event)
-        print(intersects, gates)
+
         if not intersects:
             return
 
@@ -368,7 +345,7 @@ class Application(Tk):
                 # self.icb_selected_gates[1].remove_connection(self.icb_selected_gates[0])
                 self.deselect_active_gates()
             else:
-                print("You can only disconnect two gates!")
+                log_msg(WARNING, "You can only disconnect two gates!")
 
     def place_gate(self, event: Event) -> None:
         """Places a gate on the canvas after pressing a gate button"""
@@ -385,7 +362,6 @@ class Application(Tk):
                                                                          canvas=self.screen_icb,
                                                                          center=(event.x, event.y)))
                 self.selected_timer = self.inputs[self.active_input.get_func()][-1]
-                print(self.selected_timer.get_label())
                 self.timer_prompt()  # Configure this new timer on placement
             elif isinstance(self.active_input, InputTk):
                 self.inputs[self.active_input.func].append(InputTk(self.active_input.get_func(),
@@ -404,56 +380,54 @@ class Application(Tk):
     def save(self) -> None:
         """Save the current circuit to a file, if this is the first save, prompt for file name"""
         if self.filename == "":
-            print("No save file has been specified")
+            log_msg(INFO, "No save file has been specified.")
             self.save_as()
 
-        print("Saving:", self.filename)
-        save_file = open(self.filename, 'w')
-        if save_file is None:
-            raise OSError("Failed to open: " + self.filename)
+        log_msg(INFO, "Saving diagram to: " + self.filename)
+        with open(self.filename, 'w') as save_file:
+            self.deselect_active_gates()
+            self.reset()
+            gates = []
 
-        self.deselect_active_gates()
-        self.reset()
-        gates = []
+            for func in self.inputs.keys():  # Create one list out of all gates
+                for gate in self.inputs[func]:
+                    gates.append(gate)
 
-        for func in self.inputs.keys():  # Create one list out of all gates
-            for gate in self.inputs[func]:
-                gates.append(gate)
+            for idx, gate in enumerate(gates):
+                # For each gate, write the gate and its enumeration, which is used as its id
+                print("{0},{1}".format(gate, int(idx)), file=save_file)
+                gates[idx] = (gate, idx)
 
-        for idx, gate in enumerate(gates):  # For each gate, write the gate and its enumeration,which is used as its id
-            print("{0},{1}".format(gate, int(idx)), file=save_file)
-            gates[idx] = (gate, idx)
+            print(self.file_separator, file=save_file)  # Add seperator between the gates and their connections
 
-        print(self.file_separator, file=save_file)  # Add seperator between the gates and their connections
+            # Write connections to file
+            # Get the input and output gates for each gate, convert each gate to its id and write to file
+            for (gate, cnt) in gates:
+                in_gates = gate.get_input_gates()
+                out_gates = gate.get_output_gates()
 
-        # Write connections to file
-        # Get the input and output gates for each gate, convert each gate to its id and write to file
-        for (gate, cnt) in gates:
-            in_gates = gate.get_input_gates()
-            out_gates = gate.get_output_gates()
+                # Get the id of each input gate, store in list
+                # Strip spaces from input and output gate lists to simplify reading
+                in_fmt = "[" if len(in_gates) > 0 else "[]"
+                for in_gate in in_gates:
+                    for other_gate in gates:
+                        if other_gate[0] == in_gate:
+                            # print(other_gate[1])
+                            in_fmt += str(other_gate[1]) + "|"
+                            break
+                in_fmt = in_fmt[:-1] + ']'
 
-            # Get the id of each input gate, store in list
-            # Strip spaces from input and output gate lists to simplify reading
-            in_fmt = "[" if len(in_gates) > 0 else "[]"
-            for in_gate in in_gates:
-                for other_gate in gates:
-                    if other_gate[0] == in_gate:
-                        # print(other_gate[1])
-                        in_fmt += str(other_gate[1]) + "|"
-                        break
-            in_fmt = in_fmt[:-1] + ']'
+                # For every output, find the gate in the master list and add its id number to the list,
+                # to reconstruct later
+                out_fmt = "[" if len(out_gates) > 0 else "[]"
+                for out_gate in out_gates:
+                    for other_gate in gates:
+                        if other_gate[0] == out_gate:
+                            out_fmt += str(other_gate[1]) + "|"
+                            break
+                out_fmt = out_fmt[:-1] + ']'
 
-            # For every output, find the gate in the master list and add its id number to the list, to reconstruct later
-            out_fmt = "[" if len(out_gates) > 0 else "[]"
-            for out_gate in out_gates:
-                for other_gate in gates:
-                    if other_gate[0] == out_gate:
-                        out_fmt += str(other_gate[1]) + "|"
-                        break
-            out_fmt = out_fmt[:-1] + ']'
-
-            print('{0},{1},{2}'.format(cnt, in_fmt, out_fmt), file=save_file)
-            # save_file.close()
+                print('{0},{1},{2}'.format(cnt, in_fmt, out_fmt), file=save_file)
 
     def save_as(self):
         """Create save file prompt and set self.filename to this file"""
@@ -461,124 +435,96 @@ class Application(Tk):
         self.filename = fd.asksaveasfilename(initialfile=self.filename,
                                              filetypes=[("Circuit Diagram", "*" + self.file_type)])
 
-    def save_temp(self):
-        """Writes the current configuration to a file when performing an action that requires a rebuild of the app,
-        such as changing the current font"""
-        org_save_filename = self.filename
-        self.filename = "tmp" + self.file_type
-        self.save()
-        self.filename = org_save_filename
-
     def open(self):
         """"Load circuit from file"""
-        open_filename = ""  # If open called from menu, ask for prompt, if it has been called to open a temp file,
-        # use that name
-        if self.open_filename == "":
-            self.filename = fd.askopenfilename(filetypes=[("Circuit Diagram", "*" + self.file_type)])
-            open_filename = self.filename
-        else:
-            open_filename = self.open_filename
+        self.filename = fd.askopenfilename(filetypes=[("Circuit Diagram", "*" + self.file_type)])
 
-        if open_filename == "":
+        if self.filename == "":
             return
 
-        load_file = open(open_filename, 'r')
-        if load_file is None:
-            raise FileNotFoundError("Unable to open: " + open_filename)
+        log_msg(INFO, "Loading diagram: " + os.path.abspath(self.filename))
+        with open(self.filename, 'r') as load_file:
+            self.clear()
 
-        self.clear()
-
-        # Get list of lines in file, then parse each line
-        file_lines = load_file.readlines()
-        connection_start_index = -1
-        gates = []
-        for idx, line in enumerate(file_lines):  # Load every gate into the canvas
-            if line.strip() == self.file_separator:
-                connection_start_index = idx + 1
-                break
-
-            line_list = line.strip('\n').split(sep=',')
-            # line_list[0]: Function Name
-            # line_list[1]: Center X of Gate on canvas
-            # line_list[2]: Center Y of Gate on canvas
-            # line_list[3]: Gate Output
-            # line_list[-1]: Gate Num
-            gate_func = get_logic_func_from_name(line_list[0])
-            # Strip parenthesis and space from center str, then split
-            gate_inst = len(self.inputs[gate_func]) + 1
-            position_x = int(line_list[1].strip("("))
-            position_y = int(line_list[2].strip(") "))
-            gate_out = int(line_list[3])
-            gate_center = (position_x, position_y)
-            gate = None
-            if gate_func == logic_clock:  # If this input is clock, it has a different format
-                # line_list[3]: Default Value
-                # line_list[4]: Update Rate
-                # line_list[5]: gate number
-                gate = ClockTk(update_rate=float(line_list[4]), label="Clock #" + str(gate_inst),
-                               canvas=self.screen_icb, center=gate_center, default_state=int(line_list[5]))
-            else:  # Otherwise all the other gates have the same format
-                gate = InputTk(func=gate_func, label=capitalize(gate_func.__name__ + " #" + str(gate_inst)), canvas=self.screen_icb,
-                               center=gate_center, out=gate_out, dims=(95, 45) if gate_func == output else (0, 0))
-                if is_power_gate(gate):
-                    self.is_edit_table.add_entry(gate)
-                    gate.set_label("Power #" + str(gate_inst))
-            gates.append((gate, idx))
-            self.inputs[gate_func].append(gate)
-
-        # Strip input gate section from file to work with connections
-        file_lines = file_lines[connection_start_index:]
-        for connection_line in file_lines:
-            connection_line = connection_line.strip()
-            line_list = connection_line.split(sep=',')
-            # line_list[0]: gate id
-            # line_list[1]: gate input ids
-            # line_list[2]: gate output ids
-            curr_gate_id = int(line_list[0])
-            current_gate = None
-            for (gate, num) in gates:
-                if num == curr_gate_id:
-                    current_gate = gate
+            # Get list of lines in file, then parse each line
+            file_lines = load_file.readlines()
+            connection_start_index = -1
+            gates = []
+            for idx, line in enumerate(file_lines):  # Load every gate into the canvas
+                if line.strip() == self.file_separator:
+                    connection_start_index = idx + 1
                     break
 
-            # Read gate inputs
-            # Find input gates based on gate num
-            inputs_id_list = [int(input_gate_num) for input_gate_num in line_list[1][1:-1].split('|')] \
-                if len(line_list[1]) != 2 else []
+                line_list = line.strip('\n').split(sep=',')
+                # line_list[0]: Function Name
+                # line_list[1]: Center X of Gate on canvas
+                # line_list[2]: Center Y of Gate on canvas
+                # line_list[3]: Gate Output
+                # line_list[-1]: Gate Num
+                gate_func = get_logic_func_from_name(line_list[0])
+                # Strip parenthesis and space from center str, then split
+                gate_inst = len(self.inputs[gate_func]) + 1
+                position_x = int(line_list[1].strip("("))
+                position_y = int(line_list[2].strip(") "))
+                gate_out = int(line_list[3])
+                gate_center = (position_x, position_y)
+                gate = None
+                if gate_func == logic_clock:  # If this input is clock, it has a different format
+                    # line_list[3]: Default Value
+                    # line_list[4]: Update Rate
+                    # line_list[5]: gate number
+                    gate = ClockTk(update_rate=float(line_list[4]), label="Clock #" + str(gate_inst),
+                                   canvas=self.screen_icb, center=gate_center, default_state=int(line_list[5]))
+                else:  # Otherwise all the other gates have the same format
+                    gate = InputTk(func=gate_func, label=capitalize(gate_func.__name__ + " #" + str(gate_inst)), canvas=self.screen_icb,
+                                   center=gate_center, out=gate_out, dims=(95, 45) if gate_func == output else (0, 0))
+                    if is_power_gate(gate):
+                        self.is_edit_table.add_entry(gate)
+                        gate.set_label("Power #" + str(gate_inst))
+                gates.append((gate, idx))
+                self.inputs[gate_func].append(gate)
 
-            outputs_id_list = [int(output_gate_num) for output_gate_num in line_list[2][1:-1].split('|')] \
-                if len(line_list[2]) != 2 else []
-
-            # Get list of input and output gates using gate ids
-            for input_id in inputs_id_list:
+            # Strip input gate section from file to work with connections
+            file_lines = file_lines[connection_start_index:]
+            for connection_line in file_lines:
+                connection_line = connection_line.strip()
+                line_list = connection_line.split(sep=',')
+                # line_list[0]: gate id
+                # line_list[1]: gate input ids
+                # line_list[2]: gate output ids
+                curr_gate_id = int(line_list[0])
+                current_gate = None
                 for (gate, num) in gates:
-                    if num == input_id:
-                        connect_gates(gate, current_gate)
+                    if num == curr_gate_id:
+                        current_gate = gate
                         break
 
-            for output_id in outputs_id_list:
-                for (gate, num) in gates:
-                    if num == output_id:
-                        connect_gates(current_gate, gate)
-                        break
+                # Read gate inputs
+                # Find input gates based on gate num
+                inputs_id_list = [int(input_gate_num) for input_gate_num in line_list[1][1:-1].split('|')] \
+                    if len(line_list[1]) != 2 else []
 
-        load_file.close()
+                outputs_id_list = [int(output_gate_num) for output_gate_num in line_list[2][1:-1].split('|')] \
+                    if len(line_list[2]) != 2 else []
 
-    def open_temp(self):
-        """Loads the temp file saved on program rebuild and deletes it"""
-        print("open_temp")
-        self.open_filename = "tmp" + self.file_type
-        self.open()
+                # Get list of input and output gates using gate ids
+                for input_id in inputs_id_list:
+                    for (gate, num) in gates:
+                        if num == input_id:
+                            connect_gates(gate, current_gate)
+                            break
 
-        os.remove(self.open_filename)
-        self.open_filename = ""
+                for output_id in outputs_id_list:
+                    for (gate, num) in gates:
+                        if num == output_id:
+                            connect_gates(current_gate, gate)
+                            break
 
     def clear(self):
         """Clear the canvas, clear all entries from the power table, and delete all gates"""
         self.deselect_active_gates()
         self.reset()
         self.is_edit_table.clear()
-        print(self.is_edit_table.entries)
 
         # Destroy Gates
         for func in self.inputs.keys():
@@ -600,20 +546,21 @@ class Application(Tk):
 
     def pause(self, event: Event):
         """Pauses all clocks"""
-        print("pause")
+        log_msg(INFO, "Pausing Clocks.")
         ClockTk.clocks_paused = True
-        for clock in self.inputs[logic_clock]:
-            clock.pause()
+        for timer in self.inputs[logic_clock]:
+            timer.pause()
 
     def play(self, event: Optional[Event] = None):
         """Starts all clocks"""
-        print("play")
+        log_msg(INFO, "Starting Clocks.")
         ClockTk.clocks_paused = False
-        for clock in self.inputs[logic_clock]:
-            clock.start()
+        for timer in self.inputs[logic_clock]:
+            timer.start()
 
     def reset(self, event: Optional[Event] = None):
         """Resets the clocks in the program"""
+        log_msg(INFO, "Resetting Clocks.")
         ClockTk.clocks_paused = True
         for clock in self.inputs[logic_clock]:
             clock.stop()
@@ -622,14 +569,10 @@ class Application(Tk):
         """Toggle the clocks"""
         if not ClockTk.clocks_paused:
             """Pauses all timers"""
-            ClockTk.clocks_paused = True
-            for clock in self.inputs[logic_clock]:
-                clock.pause()
+            self.pause(event)
         else:
             """Starts all timers"""
-            ClockTk.clocks_paused = False
-            for clock in self.inputs[logic_clock]:
-                clock.start()
+            self.play(event)
 
     def set_active_fn_none(self) -> None:
         """Set when a gate button is clear"""
@@ -677,7 +620,6 @@ class Application(Tk):
 
     def gui_build_icb(self) -> None:
         """Builds the canvas for the gates to exist on and create all the key bindings"""
-        print(self.width, self.input_selection_screen_width, self.width - self.input_selection_screen_width)
         self.screen_icb = Canvas(self, width=self.width - self.input_selection_screen_width, height=self.height,
                                  background=self.background_color.get(), highlightthickness=0)
         self.screen_icb.grid(row=0, column=0, sticky="NESW")
@@ -701,24 +643,26 @@ class Application(Tk):
 
     def gui_build_input_selection_menu(self) -> None:
         """Build the side pane: the power table and gate buttons"""
-        self.bordered_frame = Frame(self, background='black',  height=self.height)
-        self.bordered_frame.grid(row=0, column=1, sticky='nsew')
-        self.bordered_frame.grid_propagate(True)
+        bordered_frame = Frame(self, background='black', width=self.input_selection_screen_width,
+                               height=self.height)
+        bordered_frame.grid(row=0, column=1)
+        bordered_frame.grid_propagate(True)
 
-        self.screen_is = Frame(self.bordered_frame, background='red', )
-        self.screen_is.grid(row=0, column=0, padx=(self.border_width, 0), sticky="nsew",)
-        self.screen_is.grid_propagate(True)
+        self.screen_is = Frame(bordered_frame, background='white',
+                               width=self.input_selection_screen_width - self.border_width, height=self.height)
+        self.screen_is.grid(padx=(self.border_width, 0), sticky="nse", )
+        self.screen_is.grid_propagate(False)
 
         # Add table to this side pane
-        table_padding = {"padx": (10, 10), "pady": (5, 0)}
-        self.is_edit_table = CheckbuttonTable(self.screen_is, "Edit Inputs", self.screen_icb,
-                                             this_font=self.active_font,
-                                             background="white")
-                                             # width=self.input_selection_screen_width - self.border_width)
-        self.is_edit_table.grid(column=0, row=0, sticky="nws", **table_padding)
+        table_padding = {"padx": (10, 0), "pady": (5, 0)}
+        self.is_edit_table = CheckbuttonTable(self.screen_is, "Edit Inputs", return_focus_to=self.screen_icb,
+                                              this_font=self.active_font,
+                                              background="white")
+        # width=self.input_selection_screen_width - self.border_width)
+        self.is_edit_table.grid(column=0, row=0, sticky="ns", **table_padding)
         # Add gate buttons #############################################################################################
-        self.is_button_frame = Frame(self.screen_is, bg="cyan", )
-        self.is_button_frame.grid(column=0, row=1, sticky='ns', padx=(10, 10), pady=(10, 0))
+        self.is_button_frame = Frame(self.screen_is, bg="white", )
+        self.is_button_frame.grid(column=0, row=1, sticky='nesw', padx=(20, 0), pady=(10, 0))
         # self.is_button_frame.grid_propagate(False)
 
         # Create list of all function that are to be bound to buttons
@@ -732,7 +676,7 @@ class Application(Tk):
             self.is_border_frame = Frame(self.is_button_frame, highlightbackground="black",
                                          highlightthickness=1, bd=0)
             # self.is_border_frame.propagate(False)
-            self.is_border_frame.grid(row=i, sticky="ns", )#padx=(15, 0))
+            self.is_border_frame.grid(row=i, sticky="ns", )  # padx=(15, 0))
 
             self.is_button = Button(self.is_border_frame, image=self.imgs[i], bg="white", relief="flat",
                                     command=logic_funcs_cbs[i])
@@ -741,10 +685,7 @@ class Application(Tk):
             self.is_buttons.append((self.is_button, self.is_border_frame))
 
         self.update_idletasks()
-        self.input_selection_screen_width = self.bordered_frame.winfo_reqwidth()
-
-        print(self.bordered_frame.winfo_reqwidth(), self.bordered_frame.winfo_reqheight(),
-              self.bordered_frame.winfo_width(), self.bordered_frame.winfo_height())
+        # self.input_selection_screen_width = self.bordered_frame.winfo_reqwidth() + self.screen_is.winfo_reqwidth()
 
     def gui_build_top_menu(self) -> None:
         """Build the top menu bar"""
@@ -900,7 +841,7 @@ class Application(Tk):
             self.height = int(self.res_height_entry.get())
             self.gui_reconfig_dimensions()
         else:
-            print("[WARNING]: Resolution must be at least 800x600")
+            log_msg(WARNING, "Resolution must be at least 800x600")
 
         self.background_color = self.color_labelentry
         self.screen_icb.config(background=self.background_color.get())
@@ -908,12 +849,10 @@ class Application(Tk):
         # Set active font
         # If a font family was selected by the list box, get as a list and use as an index to get the font family
         family = self.font_family_listbox.curselection()
-        print(family)
         if family != ():
             self.font_family = self.font_family_listbox.get(family[0])
 
         size = self.font_size_listbox.curselection()
-        print(family, size)
         if size != ():
             self.font_size = int(self.font_size_listbox.get(size[0]))
 
@@ -934,19 +873,17 @@ class Application(Tk):
         settings.add("Height", self.height)
         settings.add("Background", self.background_color.get())
         settings.add("Font", [self.active_font.cget("family"), self.active_font.cget("size")])
-                              # self.active_font.cget("weight"), self.active_font.cget("slant")])
         settings.add("Colors", InputTk.line_colors_on)
         doc["Settings"] = settings
-        with open(os.path.join(self.preference_path, self.preference_file_name), mode="wt", encoding="utf-8") as fp:
+        with open(self.preference_file_name, mode="wt", encoding="utf-8") as fp:
             tomlkit.dump(doc, fp)
-            log_msg(INFO, "Saved settings to: " + os.path.join(self.preference_path, self.preference_file_name))
+            log_msg(INFO, "Saved settings to: " + self.preference_file_name)
 
     def load_preferences(self) -> None:
-        load_file = os.path.join(self.preference_path, self.preference_file_name)
-        if not os.path.exists(load_file):
+        if not os.path.exists(self.preference_file_name):
             return
 
-        with open(os.path.join(self.preference_path, self.preference_file_name), mode="rt", encoding="utf-8") as fp:
+        with open(self.preference_file_name, mode="rt", encoding="utf-8") as fp:
             document = tomlkit.load(fp)
             self.width = document["Settings"]["Width"]
             self.height = document["Settings"]["Height"]
@@ -957,7 +894,7 @@ class Application(Tk):
             self.gui_reconfig_dimensions()
             self.screen_icb.config(background=self.background_color.get())
             self.update_font(fonts_attrs[0], fonts_attrs[1])
-
+            log_msg(INFO, "Loaded settings from: " + self.preference_file_name)
 
     def timer_prompt(self):
         if self.selected_timer is None:
@@ -1051,7 +988,7 @@ class Application(Tk):
 
     def run(self) -> None:
         self.gui_build_all()
-        # self.load_preferences()
+        self.load_preferences()
         self.mainloop()
 
 
