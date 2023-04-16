@@ -8,12 +8,10 @@
 #              TRUE/FALSE/NULL, a picture
 ########################################################################################################################
 import sys
-from tkinter import *
 import threading
-import os
-from typing import *
 from time import *
-
+from tkinter import *
+from typing import *
 
 NULL = -1  # Value which represents a gate which has not received a valid input yet
 TRUE = int(True)
@@ -100,7 +98,7 @@ def logic_xor(input_gates: list[int]) -> int:
 
     result = FALSE
     for i in range(len(input_gates)):
-        result |= (input_gates[i-1] ^ input_gates[i])
+        result |= (input_gates[i - 1] ^ input_gates[i])
     return result
 
 
@@ -116,56 +114,13 @@ def logic_clock(gate) -> int:
 # Folder for button images
 IMG_FOLDER = "images"
 
-"""
-def get_logic_func_from_name(name: str) -> Optional[Callable]:
-    if name == "power":
-        return power
-    elif name == "output":
-        return output
-    elif name == "logic_not":
-        return logic_not
-    elif name == "logic_and":
-        return logic_and
-    elif name == "logic_nand":
-        return logic_nand
-    elif name == "logic_or":
-        return logic_or
-    elif name == "logic_xor":
-        return logic_xor
-    elif name == "logic_clock":
-        return logic_clock
-    else:
-        return None
-
-def get_input_img_file(func: Callable) -> str:
-    global IMG_FOLDER
-    img_name = ""
-    if func == output:
-        img_name = "output.png"
-    if func == power:
-        img_name = "power.png"
-    if func == logic_not:
-        img_name = "not.png"
-    elif func == logic_and:
-        img_name = "and.png"
-    elif func == logic_nand:
-        img_name = "nand.png"
-    elif func == logic_or:
-        img_name = "or.png"
-    elif func == logic_xor:
-        img_name = "xor.png"
-    elif func == logic_clock:
-        img_name = "clock.png"
-
-    return os.path.join(IMG_FOLDER, img_name)
-"""
-
 
 # Add new gates to this list
 # If you change the order of these gates, then the order must be the same in gui_build_input_selection_menu()
 ######################### Testing Class ################################################################################
 class Input:
     """The barest form of the input class, just does the output"""
+
     def __init__(self, func, ins: Optional[list] = None, out: int = NULL):
         self.func = func
         self.inputs = ins if ins is not None else []
@@ -265,7 +220,7 @@ class InputTk:
     line_fill_false = "red"
     line_fill_null = "black"
 
-    def __init__(self, func, gate_info_repo,  label: str = "", canvas: Optional[Canvas] = None,
+    def __init__(self, func, gate_info_repo, label: str = "", canvas: Optional[Canvas] = None,
                  center: (int, int) = (NULL, NULL), ins: Optional[list] = None,
                  out: int = NULL, dims: (int, int) = (0, 0)):
         self.func = func
@@ -371,7 +326,7 @@ class InputTk:
             return -1
 
         src_pos, dest_pos = (src_gate.bottom_right()[0], src_gate.get_center()[1]), \
-                            (self.top_left()[0], self.get_center()[1])
+            (self.top_left()[0], self.get_center()[1])
 
         self.add_input(src_gate)
         src_gate.add_output(self)
@@ -474,7 +429,8 @@ class InputTk:
     def move(self, x: int, y: int) -> None:
         self.center = (x, y)
         # Move Gate Image and Border
-        self.canvas.coords(self.rect_id, self.top_left()[0] - self.border_offset, self.top_left()[1] - self.border_offset,
+        self.canvas.coords(self.rect_id, self.top_left()[0] - self.border_offset,
+                           self.top_left()[1] - self.border_offset,
                            self.bottom_right()[0] + self.border_offset, self.bottom_right()[1] + self.border_offset)
 
         if not is_output_gate(self):
@@ -515,6 +471,7 @@ class InputTk:
 
 class ClockTimer:
     """Asynchronous Timer for a clock object"""
+
     def __init__(self, func, rate, gate):
         self.startTime = 0
         self.endTime = 0
@@ -538,7 +495,7 @@ class ClockTimer:
         return self.startTime
 
     def resume(self) -> None:
-        self.timer = threading.Timer(self.rate-(self.endTime-self.startTime), self.func, args=[self.gate])
+        self.timer = threading.Timer(self.rate - (self.endTime - self.startTime), self.func, args=[self.gate])
         self.timer.start()
 
     def cancel(self) -> None:
@@ -646,7 +603,7 @@ def connect_gates(src_gate: InputTk, dest_gate: InputTk) -> None:
     # Only allow one input to a not gate
     # Clocks/Power sources can only be outputs, so return if one is set as a destination gate
     if (is_not_gate(dest_gate) and len(dest_gate.get_input_gates()) == 1) or \
-       (is_output_gate(dest_gate) and len(dest_gate.get_input_gates()) == 1) or is_output_gate(src_gate)\
+            (is_output_gate(dest_gate) and len(dest_gate.get_input_gates()) == 1) or is_output_gate(src_gate) \
             or is_clock(dest_gate):
         return
 
@@ -670,7 +627,8 @@ class GateInfo:
             "name": name if name is not None else func.__name__,
             "desc": desc if desc is not None else "",
             "callback": callback,
-            "image_file": image_file if image_file is not None else ""
+            "image_file": image_file if image_file is not None else "",
+            "image": PhotoImage(file=image_file) if image_file is not None else None
         }
         self.active_gates = []
 
@@ -687,10 +645,10 @@ class GateInfo:
     def keys(self):
         return self.info.keys()
 
-    def __getitem__(self, item: str) -> Union[str | Callable]:
+    def __getitem__(self, item: str) -> Union[str | Callable | PhotoImage]:
         return self.info[item]
 
-    def __setitem__(self, key: str, value: Union[str | Callable]) -> None:
+    def __setitem__(self, key: str, value: Union[str | Callable | PhotoImage]) -> None:
         self.info[key] = value
 
 

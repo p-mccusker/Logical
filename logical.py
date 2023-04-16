@@ -12,11 +12,12 @@
 #   - Method of creating custom circuits to be place and used as other gates
 ########################################################################################################################
 import platform
-from tkinter import filedialog as fd
-import sys
 import os
-from tk_widgets import *
+from tkinter import filedialog as fd
+
 import tomlkit
+
+from tk_widgets import *
 
 
 def capitalize(string: str) -> str:
@@ -56,7 +57,7 @@ def resource_path(relative_path: str) -> str:
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
-    except Exception:
+    except:
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
@@ -83,7 +84,7 @@ class Application(Tk):
         # Parse command line arguments
         for i, arg in enumerate(sys.argv):
             if arg == '-w':
-                width = int(sys.argv[i+1])
+                width = int(sys.argv[i + 1])
                 if width < 800:
                     log_msg(ERROR, "Width must be >= 800", ValueError)
 
@@ -92,8 +93,6 @@ class Application(Tk):
                 if height < 600:
                     log_msg(ERROR, sys.argv[i + 1] + ": height must be an integer >", ValueError)
 
-        self.init_file_paths()
-
         self.width = width
         self.height = height
         self.x = self.width / 2
@@ -101,11 +100,13 @@ class Application(Tk):
         self.background_color = StringVar(value="white")
         self.icon = PhotoImage(file=resource_path(join_folder_file(IMG_FOLDER, "icon.png")))
 
-        self.title("Interactive Circuit Builder")
+        self.title("Logical")
         self.geometry(str(self.width) + "x" + str(self.height))
         self.resizable(False, False)
         self.config(background=self.background_color.get())
         self.iconphoto(True, self.icon)
+
+        self.imgs = []  # [PhotoImage(file=self.gates[func]["image_file"]) for func in self.gates.keys()]
         # Dictionary to hold the input gates, where the gate type is the key and the value is the list of gates
         self.gates = GatesInfoRepo()
         self.build_gate_repo()
@@ -116,7 +117,7 @@ class Application(Tk):
 
         # List to hold references to the Photoimages of the input gates so that Tkinter doesn't garbage collect
         # prematurely
-        self.imgs = [PhotoImage(file=self.gates[func]["image_file"]) for func in self.gates.keys()]
+
         self.default_update_rate = 2  # Default Update for a new clock in seconds, default to 2s
 
         self.active_input = None  # The input object to be placed when the user clicks the mouse
@@ -136,33 +137,24 @@ class Application(Tk):
         self.icb_click_drag_gate = None  # The gate currently being moved by the mouse
         #############################
         # Prompt Widgets ############
-        self.screen_prompt = None  # Toplevel popup window for prompt
-        self.prompt_label = None  # Label to display prompt message
-        self.prompt_button_confirm = None  # Confirmation button
-        self.prompt_button_cancel = None  # Cancellation button
+        self.screen_exit_prompt = None  # Toplevel popup window for prompt
         #############################
         # Input Selection Widgets ###
+        self.bordered_frame = None  # Border Frame to separate canvas and the right pane
         self.screen_is = None  # Separate Window to select which gate input to place
-        self.screen_is_height = self.height  # The window is as tall as the window
-        self.is_button_frame = None  # Frame a button is placed on
-        self.is_border_frame = None  # Border frame for a button
-        self.is_button = None  # Stores reference to a button so Tk doesn't GC it prematurely
         self.is_buttons = []  # Holds tuple: the buttons for each input gate and its border frame
         self.is_edit_table = None  # Table to toggle inputs on/off
+        self.is_button_frame = None  # LabelFrame to hold the buttons and their labels
         #############################
         #############################
         # Timer Window Widgets ######
         self.timer_popup = None  # Toplevel popup window for window
-        self.timer_labelframe = None  # Label Frame for popup
-        self.timer_title_label = None  # Label to give instructions to user
+
         self.selected_timer = None  # The timer that is currently being modified
-        self.timer_state_label = None  # Text label for checkbox, use instead of checkbox text to put left of checkbox
         self.timer_state_cb = None  # Checkbox to toggle the timer's default state
         self.timer_state_intvar = IntVar(value=TRUE)  # Value of the default state checkbox
-        self.timer_entry_label = None  # Label next to timer entry
         self.timer_entry = None  # Entry for timer toggle rate
         self.timer_entry_strvar = StringVar(value=str(self.default_update_rate))  # Value of the timer update rate
-        self.timer_done_button = None  # Button to close window
         #############################
         # Saving/Loading Vars #######
         self.filename = ""
@@ -173,25 +165,46 @@ class Application(Tk):
         self.save_path = ""
         #############################
         # Preference Vars ###########
+        self.preference_toplevel = None
+        self.res_width_var = None
+        self.res_width_entry = None
+        self.res_height_var = None
+        self.res_height_entry = None
+        self.color_labelentry = None
+        self.line_colors_checkbox = None
+        self.font_family_listbox = None
+        self.font_size_listbox = None
         self.font_families = [*set(list(font.families()))]
         self.font_families.sort()
         #############################
+        # Help Vars ###########
+        self.help_window = None
+        #############################
 
-    # GATE_FUNCTIONS = [power, logic_not, logic_and, logic_nand, logic_or, logic_xor, output, logic_clock]
+        self.init_file_paths()
+
     def build_gate_repo(self):
         """Compiles repository for gates, the active ones, their names, and descriptions.  When adding new functions,
         register them here"""
         self.gates.register_gate(power, name=None,
-                                  desc="This is a discrete power source.  It is either on and off and can be toggled by "
-                                       "clicking on the Power Gate Table",
-                                  callback=self.set_active_fn_power, image_file=resource_path(join_folder_file(IMG_FOLDER, "power.png")))
-        self.gates.register_gate(logic_not, name=None, desc="", callback=self.set_active_fn_not, image_file=resource_path(join_folder_file(IMG_FOLDER, "not.png")))
-        self.gates.register_gate(logic_and, name=None, desc="", callback=self.set_active_fn_and, image_file=resource_path(join_folder_file(IMG_FOLDER, "and.png")))
-        self.gates.register_gate(logic_nand, name=None, desc="", callback=self.set_active_fn_nand, image_file=resource_path(join_folder_file(IMG_FOLDER, "nand.png")))
-        self.gates.register_gate(logic_or, name=None, desc="", callback=self.set_active_fn_or, image_file=resource_path(join_folder_file(IMG_FOLDER, "or.png")))
-        self.gates.register_gate(logic_xor, name=None, desc="", callback=self.set_active_fn_xor, image_file=resource_path(join_folder_file(IMG_FOLDER, "xor.png")))
-        self.gates.register_gate(output, name=None, desc="", callback=self.set_active_fn_output, image_file=resource_path(join_folder_file(IMG_FOLDER, "output.png")))
-        self.gates.register_gate(logic_clock, name=None, desc="", callback=self.set_active_fn_clock, image_file=resource_path(join_folder_file(IMG_FOLDER, "clock.png")))
+                                 desc="This is a discrete power source.  It is either on and off and can be toggled by "
+                                      "clicking on the Power Gate Table",
+                                 callback=self.set_active_fn_power,
+                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "power.png")))
+        self.gates.register_gate(logic_not, name=None, desc="", callback=self.set_active_fn_not,
+                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "not.png")))
+        self.gates.register_gate(logic_and, name=None, desc="", callback=self.set_active_fn_and,
+                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "and.png")))
+        self.gates.register_gate(logic_nand, name=None, desc="", callback=self.set_active_fn_nand,
+                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "nand.png")))
+        self.gates.register_gate(logic_or, name=None, desc="", callback=self.set_active_fn_or,
+                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "or.png")))
+        self.gates.register_gate(logic_xor, name=None, desc="", callback=self.set_active_fn_xor,
+                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "xor.png")))
+        self.gates.register_gate(output, name=None, desc="", callback=self.set_active_fn_output,
+                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "output.png")))
+        self.gates.register_gate(logic_clock, name=None, desc="", callback=self.set_active_fn_clock,
+                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "clock.png")))
 
     def update_font(self, family: str, size: int) -> None:
         self.font_family = family
@@ -402,7 +415,8 @@ class Application(Tk):
             if is_clock(self.active_input):
                 self.gates[self.active_input.get_func()].add_active_gate(ClockTk(update_rate=self.default_update_rate,
                                                                                  gate_info_repo=self.gates,
-                                                                                 label=self.active_input.get_label() + str(inst_num),
+                                                                                 label=self.active_input.get_label() +
+                                                                                       str(inst_num),
                                                                                  canvas=self.screen_icb,
                                                                                  center=(event.x, event.y)))
                 self.selected_timer = self.gates[self.active_input.get_func()].get_active_gates()[-1]
@@ -410,11 +424,16 @@ class Application(Tk):
             elif isinstance(self.active_input, InputTk):
                 self.gates[self.active_input.get_func()].add_active_gate(InputTk(self.active_input.get_func(),
                                                                                  gate_info_repo=self.gates,
-                                                                                 label=self.active_input.get_label() + str(inst_num),
-                                                                                 canvas=self.screen_icb, center=(event.x, event.y),
+                                                                                 label=self.active_input.get_label() +
+                                                                                 str(inst_num),
+                                                                                 canvas=self.screen_icb,
+                                                                                 center=(event.x, event.y),
                                                                                  out=self.active_input.out,
                                                                                  # If output gate, make it smaller to fit with border
-                                                                                 dims=(self.img_width - 5, self.img_height - 5) if is_output_gate(self.active_input) else (0, 0)))
+                                                                                 dims=(self.img_width - 5,
+                                                                                       self.img_height - 5) if
+                                                                                 is_output_gate(self.active_input) else
+                                                                                 (0, 0)))
             last_input = self.gates[self.active_input.get_func()].get_active_gates()[-1]
             self.active_input_img_index = last_input.get_id()
             # Add checkbox entry to entry menu if gate is a power source
@@ -476,11 +495,12 @@ class Application(Tk):
         """Create save file prompt and set self.filename to this file"""
         # using with statement
         self.filename = fd.asksaveasfilename(initialfile=self.filename, initialdir=self.save_path,
-                                             filetypes=[("Circuit Diagram", "*" + self.file_type)]) + self.file_type
+                                             filetypes=[("Circuit Diagram", "*" + self.file_type)])
 
     def open(self):
         """"Load circuit from file"""
-        self.filename = fd.askopenfilename(initialdir=self.save_path, filetypes=[("Circuit Diagram", "*" + self.file_type)])
+        self.filename = fd.askopenfilename(initialdir=self.save_path,
+                                           filetypes=[("Circuit Diagram", "*" + self.file_type)])
 
         if self.filename == "":
             return
@@ -516,10 +536,12 @@ class Application(Tk):
                     # line_list[3]: Default Value
                     # line_list[4]: Update Rate
                     # line_list[5]: gate number
-                    gate = ClockTk(gate_info_repo=self.gates, update_rate=float(line_list[4]), label="Clock #" + str(gate_inst),
+                    gate = ClockTk(gate_info_repo=self.gates, update_rate=float(line_list[4]),
+                                   label="Clock #" + str(gate_inst),
                                    canvas=self.screen_icb, center=gate_center, default_state=int(line_list[5]))
                 else:  # Otherwise all the other gates have the same format
-                    gate = InputTk(func=gate_func, gate_info_repo=self.gates, label=capitalize(gate_func.__name__ + " #" + str(gate_inst)),
+                    gate = InputTk(func=gate_func, gate_info_repo=self.gates,
+                                   label=capitalize(gate_func.__name__ + " #" + str(gate_inst)),
                                    canvas=self.screen_icb, center=gate_center, out=gate_out,
                                    dims=(95, 45) if gate_func == output else (0, 0))
                     if is_power_gate(gate):
@@ -572,7 +594,6 @@ class Application(Tk):
 
         # Destroy Gates
         for func in self.gates.keys():
-            print(func)
             for gate in self.gates[func].get_active_gates():
                 gate.delete()
             self.gates[func].active_gates = []
@@ -590,31 +611,64 @@ class Application(Tk):
     def help(self) -> None:
         self.help_window = Toplevel(self)
         self.help_window.title("Help")
-        self.help_window.resizable(True, True)
+        self.help_window.resizable(False, False)
+        # self.help_window.geometry("800x600")
 
         self.help_window.wait_visibility()
         self.help_window.grab_set()
         self.help_window.transient(self)
 
-        back_frame = Frame(self.help_window)
-        back_frame.grid(row=0, column=0, sticky='news')
+        scrollable_frame = ScrollableFrame(self.help_window, this_font=self.active_font, width=800, height=600)
+        scrollable_frame.grid(row=0, column=0, padx=(0, 20), sticky='news')
 
-        shortcut_labelframe = LabelFrame(back_frame, font=self.active_font, text="Shortcuts")
-        shortcut_labelframe.grid(row=0, column=0, sticky='new')
+        # shortcut_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Shortcuts")
+        # shortcut_labelframe.grid(row=0, column=0, sticky='new')
 
-        desc_labelframe = LabelFrame(back_frame, font=self.active_font, text="Gate Descriptions")
-        desc_labelframe.grid(row=1, column=0, sticky='news', padx=(0, 0), pady=(0, 0))
+        desc_labelframe = LabelFrame(scrollable_frame.frame, font=self.active_font, text="Gate Descriptions")
+        desc_labelframe.grid(row=1, column=0, sticky='news', padx=(10, 0), pady=(5, 5))
 
-        power_desc = PictureDescription(self.imgs[0], "This is the power gate", 30, 20, self.active_font,
-                                        master=desc_labelframe)
+        power_desc = PictureDescription(desc_labelframe, img=self.gates[power]["image"], desc_text=self.gates[power]["desc"],
+                                        text_width=30, text_height=6, this_font=self.active_font)
+        power_desc.grid(row=0, column=0)
 
-        button_frame = Frame(back_frame, )
-        button_frame.grid(row=2, column=0)
+        not_desc = PictureDescription(desc_labelframe, img=self.gates[logic_not]["image"], desc_text=self.gates[logic_not]["desc"],
+                                      text_width=30, text_height=6, this_font=self.active_font)
+        not_desc.grid(row=0, column=1)
+
+        and_desc = PictureDescription(desc_labelframe, img=self.gates[logic_and]["image"], desc_text=self.gates[logic_and]["desc"],
+                                      text_width=30, text_height=6, this_font=self.active_font)
+        and_desc.grid(row=1, column=0)
+
+        nand_desc = PictureDescription(desc_labelframe, img=self.gates[logic_nand]["image"], desc_text=self.gates[logic_nand]["desc"],
+                                       text_width=30, text_height=6, this_font=self.active_font)
+        nand_desc.grid(row=1, column=1)
+
+        or_desc = PictureDescription(desc_labelframe, img=self.gates[logic_or]["image"], desc_text=self.gates[logic_or]["desc"],
+                                     text_width=30, text_height=6, this_font=self.active_font)
+        or_desc.grid(row=2, column=0)
+
+        xor_desc = PictureDescription(desc_labelframe, img=self.gates[logic_xor]["image"], desc_text=self.gates[logic_xor]["desc"],
+                                      text_width=30, text_height=6, this_font=self.active_font)
+        xor_desc.grid(row=2, column=1)
+
+        output_desc = PictureDescription(desc_labelframe, img=self.gates[output]["image"], desc_text=self.gates[output]["desc"],
+                                         text_width=30, text_height=6, this_font=self.active_font)
+        output_desc.grid(row=3, column=0)
+
+        clock_desc = PictureDescription(desc_labelframe, img=self.gates[logic_clock]["image"], desc_text=self.gates[logic_clock]["desc"],
+                                        text_width=30, text_height=6, this_font=self.active_font)
+        clock_desc.grid(row=3, column=1)
+
+        button_frame = Frame(self.help_window)
+        button_frame.grid(row=2, column=0, sticky='news')
         done_button = Button(button_frame, text="Done", font=self.active_font, command=self.close_help)
         done_button.grid(row=0, column=0)
 
     def close_help(self) -> None:
-        pass
+        # Reset popup state
+        self.help_window.grab_release()
+        self.help_window.destroy()
+        self.help_window.update()
 
     def pause(self, event: Event):
         """Pauses all clocks"""
@@ -693,7 +747,7 @@ class Application(Tk):
     def gui_build_input_selection_menu(self) -> None:
         """Build the side pane: the power table and gate buttons"""
         self.bordered_frame = Frame(self, background='black', width=self.input_selection_screen_width,
-                               height=self.height)
+                                    height=self.height)
         self.bordered_frame.grid(row=0, column=1)
         self.bordered_frame.grid_propagate(False)
 
@@ -708,13 +762,10 @@ class Application(Tk):
         # self.is_button_frame.grid_propagate(False)
 
         for (i, func) in enumerate(self.gates.keys()):
-            image = PhotoImage(file=self.gates[func]["image_file"])
-            self.imgs[i] = image
-
-            self.labeled_button_frame = Frame(self.is_button_frame, background='white')
-            self.labeled_button_frame.grid(column=0, row=i, padx=(0, 5), sticky="e")
+            labeled_button_frame = Frame(self.is_button_frame, background='white')
+            labeled_button_frame.grid(column=0, row=i, padx=(0, 5), sticky="e")
             if i == len(self.gates) - 1:
-                self.labeled_button_frame.grid_configure(pady=(0, 5))
+                labeled_button_frame.grid_configure(pady=(0, 5))
 
             if self.gates[func]["func"] not in (output, power):
                 # Strip logic_ from each logic gate name
@@ -722,34 +773,26 @@ class Application(Tk):
             else:
                 label_text = capitalize(self.gates[func]["name"]) + " Gate:"
 
-            self.button_label = Label(self.labeled_button_frame, text=label_text, background='white',
-                                      font=reconfig_font(self.active_font, offset=-2, weight="bold"))
-            self.button_label.grid(column=0, row=0, padx=(0, 3), sticky='w')
+            button_label = Label(labeled_button_frame, text=label_text, background='white',
+                                 font=reconfig_font(self.active_font, offset=-2, weight="bold"))
+            button_label.grid(column=0, row=0, padx=(0, 3), sticky='w')
 
-            self.is_border_frame = Frame(self.labeled_button_frame, highlightbackground="black",
-                                         highlightthickness=1, bd=0)
-            self.is_border_frame.grid(row=0, column=1, sticky='e')
-            self.is_border_frame.propagate(True)
+            is_border_frame = Frame(labeled_button_frame, highlightbackground="black",
+                                    highlightthickness=1, bd=0)
+            is_border_frame.grid(row=0, column=1, sticky='e')
+            is_border_frame.propagate(True)
 
-            self.is_button = Button(self.is_border_frame, image=self.imgs[i], bg="white", relief="flat",
-                                    command=self.gates[func]["callback"])
-            self.is_button.grid(sticky='e')
+            is_button = Button(is_border_frame, image=self.gates[func]["image"], bg="white", relief="flat",
+                               command=self.gates[func]["callback"])
+            is_button.grid(sticky='e')
 
-            self.is_buttons.append((self.is_button, self.button_label))
+            self.is_buttons.append((is_button, button_label))
 
         self.update_idletasks()
 
         # Add table to this side pane
-        table_padding = {"padx": (10, 10), "pady": (5, 0)}
-
-        table_start_pos = (0, self.is_button_frame.winfo_reqheight())
-        table_dims = (self.input_selection_screen_width - self.border_width,
-                      self.height - self.is_button_frame.winfo_reqheight())
-
-        self.is_edit_table = CheckbuttonTable(self.screen_is, self.screen_icb, self.active_font,
-                                              text='Power Gates', width=table_dims[0] - 70,
-                                              height=table_dims[1] - 30)
-        self.is_edit_table.grid(row=1, column=0, sticky='nesw', padx=(10, 0))
+        self.is_edit_table = CheckbuttonTable(self.screen_is, self.screen_icb, self.active_font, text='Power Gates')
+        self.is_edit_table.grid(row=1, column=0, sticky='ns', padx=(10, 0))
         self.is_edit_table.grid_propagate(False)
 
     def gui_build_icb(self) -> None:
@@ -815,9 +858,9 @@ class Application(Tk):
         """Updates the width and height of the application"""
         self.bordered_frame.config(height=self.height)
         self.screen_is.config(height=self.height)
-        self.screen_icb.config(width=self.width-self.input_selection_screen_width, height=self.height)
-        self.is_edit_table.config_dims(height=self.height - self.is_button_frame.winfo_height() - 20,
-                                       width=self.input_selection_screen_width - 10)
+        self.screen_icb.config(width=self.width - self.input_selection_screen_width, height=self.height)
+        self.is_edit_table.config_dims(height=self.height - self.is_button_frame.winfo_height() - 30,
+                                       width=self.input_selection_screen_width - 30)
         self.geometry(str(self.width) + "x" + str(self.height))
 
     def toggle_line_colors(self) -> None:
@@ -1005,27 +1048,27 @@ class Application(Tk):
         self.timer_state_intvar.set(self.selected_timer.output())
         self.timer_entry_strvar.set(str(self.selected_timer.get_rate()))
 
-        self.timer_labelframe = LabelFrame(self.timer_popup, text="Set Clock Properties", font=self.font_top)
-        self.timer_labelframe.grid(padx=(5, 5), pady=(0, 5))
+        timer_labelframe = LabelFrame(self.timer_popup, text="Set Clock Properties", font=self.font_top)
+        timer_labelframe.grid(padx=(5, 5), pady=(0, 5))
 
-        entry_frame = Frame(self.timer_labelframe)
+        entry_frame = Frame(timer_labelframe)
         entry_frame.grid(row=0, column=0, padx=(10, 10), pady=(5, 10))
 
-        self.timer_entry_label = Label(entry_frame, text="Timer Update Rate (seconds):", font=self.active_font)
-        self.timer_entry_label.grid(row=0, column=0, padx=(0, 5), pady=(0, 0), sticky=W)
+        timer_entry_label = Label(entry_frame, text="Timer Update Rate (seconds):", font=self.active_font)
+        timer_entry_label.grid(row=0, column=0, padx=(0, 5), pady=(0, 0), sticky=W)
         self.timer_entry = Entry(entry_frame, textvariable=self.timer_entry_strvar, width=5, font=self.active_font)
         self.timer_entry.grid(row=0, column=1, padx=(0, 0), pady=(0, 0), sticky=W)
 
-        cb_frame = Frame(self.timer_labelframe)
+        cb_frame = Frame(timer_labelframe)
         cb_frame.grid(row=1, column=0, padx=(0, 20), pady=(0, 10))
-        self.timer_state_label = Label(cb_frame, text="Set Timer State (Default On):", font=self.active_font)
-        self.timer_state_label.grid(row=0, column=0, padx=(0, 5))
+        timer_state_label = Label(cb_frame, text="Set Timer State (Default On):", font=self.active_font)
+        timer_state_label.grid(row=0, column=0, padx=(0, 5))
         self.timer_state_cb = Checkbutton(cb_frame, variable=self.timer_state_intvar, font=self.active_font)
         self.timer_state_cb.grid(row=0, column=1, padx=(0, 0), pady=(0, 0), sticky=W)
 
-        self.timer_done_button = Button(self.timer_labelframe, text="Done", command=self.close_timer_prompt,
-                                        font=self.active_font)
-        self.timer_done_button.grid(row=2, column=0)
+        timer_done_button = Button(timer_labelframe, text="Done", command=self.close_timer_prompt,
+                                   font=self.active_font)
+        timer_done_button.grid(row=2, column=0)
         self.wait_window(self.timer_popup)
 
     def close_timer_prompt(self):
@@ -1049,16 +1092,16 @@ class Application(Tk):
         self.screen_exit_prompt.grab_set()
         self.screen_exit_prompt.transient(self)
 
-        self.prompt_label = Label(self.screen_exit_prompt, text=msg, font=self.active_font)
-        self.prompt_label.pack(padx=(15, 15), pady=(15, 15))
+        prompt_label = Label(self.screen_exit_prompt, text=msg, font=self.active_font)
+        prompt_label.pack(padx=(15, 15), pady=(15, 15))
 
-        self.prompt_button_confirm = Button(self.screen_exit_prompt, text="Yes", command=callback,
-                                            font=self.active_font)
-        self.prompt_button_confirm.pack(side=LEFT, padx=(55, 5), pady=(10, 20))
+        prompt_button_confirm = Button(self.screen_exit_prompt, text="Yes", command=callback,
+                                       font=self.active_font)
+        prompt_button_confirm.pack(side=LEFT, padx=(55, 5), pady=(10, 20))
 
-        self.prompt_button_cancel = Button(self.screen_exit_prompt, text="Cancel", command=self.close_exit_prompt,
-                                           font=self.active_font)
-        self.prompt_button_cancel.pack(side=RIGHT, padx=(5, 55), pady=(10, 20))
+        prompt_button_cancel = Button(self.screen_exit_prompt, text="Cancel", command=self.close_exit_prompt,
+                                      font=self.active_font)
+        prompt_button_cancel.pack(side=RIGHT, padx=(5, 55), pady=(10, 20))
         self.screen_exit_prompt.resizable(False, False)
 
         self.wait_window(self.screen_exit_prompt)

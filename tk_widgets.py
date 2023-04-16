@@ -8,6 +8,7 @@
 import tkinter
 import tkinter.font as font
 from tkinter import scrolledtext
+
 from logic_gate import *
 
 
@@ -22,7 +23,7 @@ def get_widget_bottom_x(widget: Widget) -> int:
 
 
 def reconfig_font(this_font: font.Font, offset: int, weight: Optional[str] = None,
-                  slant:  Optional[str] = None) -> font.Font:
+                  slant: Optional[str] = None) -> font.Font:
     """Creates a new font based off this_font with options modified"""
     return font.Font(family=this_font["family"],
                      size=this_font["size"] + offset,
@@ -31,7 +32,8 @@ def reconfig_font(this_font: font.Font, offset: int, weight: Optional[str] = Non
 
 
 class PictureDescription(Frame):
-    def __init__(self, img: PhotoImage, desc_text: str, text_width: int, text_height: int, this_font: font.Font,  *args, **kwargs):
+    def __init__(self, *args, img: PhotoImage, desc_text: str, text_width: int, text_height: int, this_font: font.Font,
+                 **kwargs):
         Frame.__init__(self, *args, **kwargs)
         self.img = img
         self.img_label = Label(self, image=self.img)
@@ -47,8 +49,10 @@ class PictureDescription(Frame):
         self.this_font = new_font
         self.description.config(font=self.this_font)
 
+
 class LabeledEntry(Frame):
     """Widget containing a label to the left of a entry"""
+
     def __init__(self, *arg, label_text: str = "", entry_text: str = "", entry_var: Optional[StringVar] = None,
                  entry_width: Optional[int] = None, widget_font: Optional[str | font.Font] = None, **kwargs):
         Frame.__init__(self, *arg, **kwargs)
@@ -87,25 +91,30 @@ class LabeledEntry(Frame):
 class TableCheckbutton(Frame):
     """Widget with a label to the left of a checkbox. Is associated with a power gate and when clicked, toggles the
     output of this gate"""
+
     def __init__(self, parent: Optional[Widget], gate: InputTk, return_focus_to: Widget, this_font: font.Font,
                  popup_font: font.Font, *args, checkbutton_padding: Optional[dict] = None, **kwargs):
         super().__init__(parent, *args, background="white", **kwargs)
         self.gate = gate
         self.return_focus_to = return_focus_to
         self.this_font = this_font
+        # Popup Variables ##############
         self.popup_font = popup_font
+        self.toplevel = None  # Prompt to change gate name
+        self.entry_var = None
+        self.popup_entry = None
 
         if gate is not None:  # If a gate is provided, intitalize the widget
             self.check_var = IntVar(value=gate.output())
             self.checkbutton = Checkbutton(self, variable=self.check_var, text=self.gate.get_label(),
-                                           onvalue=TRUE, offvalue=FALSE, width=10, command=self.click_cb,
+                                           onvalue=TRUE, offvalue=FALSE, width=15, command=self.click_cb,
                                            background='white', font=this_font)
             self.checkbutton.bind("<Button-3>", self.right_click_cb)
             self.has_default_name = True
             if checkbutton_padding is not None:
-                self.checkbutton.grid(row=0, column=0, **checkbutton_padding)
+                self.checkbutton.grid(row=0, column=0, sticky="w", **checkbutton_padding)
             else:
-                self.checkbutton.grid(row=0, column=0)
+                self.checkbutton.grid(row=0, column=0, sticky="w")
         else:  # Else create a minimal widget
             self.checkbutton = Label(self.master)
             self.grid()
@@ -167,10 +176,10 @@ class TableCheckbutton(Frame):
 class CheckbuttonTable(LabelFrame):
     """Scrollable LabelFrame which stores entries corresponding to each power gate. Each entry has a checkbox that,
     when clicked, toggles the output of the gate. Can also be right-clicked to change the name of the gate."""
+
     def __init__(self, parent, return_focus_to: Widget, this_font: font.Font, *args, **kwargs):
         LabelFrame.__init__(self, master=parent, background='white', font=this_font, *args, **kwargs)
-        self.canvas = Canvas(self, highlightthickness=0, background='white', width=self.winfo_reqwidth(),
-                             height=self.winfo_reqheight() - 25)
+        self.canvas = Canvas(self, highlightthickness=0, background='white')
         self.frame = Frame(self.canvas, background='white')
         self.vsb = Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.vsb.set)
@@ -189,7 +198,7 @@ class CheckbuttonTable(LabelFrame):
         self.frame.bind("<Configure>", self.on_frame_configure)
 
         self.empty_text_label = Label(self.frame, bg="white", text="No Power Gates...", font=this_font)
-        self.empty_text_label.grid(row=0, column=0, sticky='we')
+        self.empty_text_label.grid(row=0, column=0, sticky='')
 
     def config_dims(self, width: Optional[int] = None, height: Optional[int] = None) -> None:
         self.config(width=width, height=height)
@@ -203,7 +212,7 @@ class CheckbuttonTable(LabelFrame):
         tbl_entry = TableCheckbutton(self.frame, gate, self.return_focus_to,
                                      this_font=reconfig_font(self.this_font, offset=-2), popup_font=self.this_font,
                                      checkbutton_padding=self.checkbox_padding)
-        tbl_entry.grid(row=len(self.entries), sticky='ensw')
+        tbl_entry.grid(row=len(self.entries), sticky='')
         self.entries.append(tbl_entry)
 
     def del_entry(self, row: int) -> None:
@@ -270,5 +279,28 @@ class CheckbuttonTable(LabelFrame):
 
     def on_frame_configure(self, event):
         """Reset the scroll region to encompass the inner frame"""
-        self.canvas.config(width=self.winfo_reqwidth() - 20)
+        self.canvas.config(width=self.winfo_reqwidth() - 25)
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+
+class ScrollableFrame(Frame):
+
+    def __init__(self, *args, this_font: font.Font,  **kwargs):
+        Frame.__init__(self, *args, **kwargs)
+        self.canvas = Canvas(self, highlightthickness=0,)
+        self.frame = Frame(self.canvas)
+        self.vsb = Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.vsb.set)
+
+        self.this_font = this_font
+
+        self.vsb.grid(row=0, column=1, sticky='nse', pady=(0, 0))
+        self.canvas.grid(row=0, column=0, sticky='nws', padx=(0, 0))
+
+        self.canvas.create_window((1, 1), window=self.frame, anchor="nw", tags="self.frame")
+        self.frame.bind("<Configure>", self.on_frame_configure)
+
+    def on_frame_configure(self, event):
+        """Reset the scroll region to encompass the inner frame"""
+        # self.canvas.config(width=self.winfo_reqwidth() - 25)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
