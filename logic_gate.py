@@ -1,6 +1,16 @@
+########################################################################################################################
+# File: logic_gate.py
+# Author: Peter McCusker
+# License:
+# Date: 01/04/2023
+# Description: Defines global variables used throughout the program. Defines the logical functions used by the gates.
+#              Constructs the InputTK class which is what each gate is made of. Consists of a function which returns
+#              TRUE/FALSE/NULL, a picture
+########################################################################################################################
 import sys
 from tkinter import *
-import threading, os
+import threading
+import os
 from typing import *
 from time import *
 
@@ -13,16 +23,24 @@ INFO = 0
 WARNING = 1
 ERROR = 2
 
-LEVEL_INFO = True
-LEVEL_WARNING = True
-LEVEL_ERROR = True
+INFO_PRINT_ON = True  # Set false to disable informational prints
 
 
-def log_msg(level: int, msg: str, err_type = None) -> None:
+def turn_info_print_off():
+    global INFO_PRINT_ON
+    INFO_PRINT_ON = False
+
+
+def turn_info_print_on():
+    global INFO_PRINT_ON
+    INFO_PRINT_ON = True
+
+
+def log_msg(level: int, msg: str, err_type=None) -> None:
     global INFO, WARNING, ERROR
-    if LEVEL_INFO and level == INFO:
+    if INFO_PRINT_ON and level == INFO:
         print("[INFO]:", msg)
-    elif LEVEL_WARNING and level == WARNING:
+    elif level == WARNING:
         print("[WARNING]:", msg)
     elif level == ERROR:
         print("[ERROR]:", msg)
@@ -95,7 +113,11 @@ def logic_clock(gate) -> int:
     return gate.output()
 
 
-def get_logic_func_from_name(name: str):
+# Folder for button images
+IMG_FOLDER = "./images"
+
+"""
+def get_logic_func_from_name(name: str) -> Optional[Callable]:
     if name == "power":
         return power
     elif name == "output":
@@ -115,15 +137,7 @@ def get_logic_func_from_name(name: str):
     else:
         return None
 
-
-# Global counter for each input object, gives each object a unique id
-IMG_FOLDER = "images"
-INPUT_GATES = [output, power, logic_not, logic_and, logic_nand, logic_or, logic_xor, logic_clock]
-
-
-def get_input_img_file(func) -> str:
-    """Gets the name of the image file associated with func.  func must be in INPUT_GATES and new functions must be
-    added to this list and the function"""
+def get_input_img_file(func: Callable) -> str:
     global IMG_FOLDER
     img_name = ""
     if func == output:
@@ -144,27 +158,14 @@ def get_input_img_file(func) -> str:
         img_name = "clock.png"
 
     return os.path.join(IMG_FOLDER, img_name)
-
-
-def get_input_img(func, output: Optional[list[PhotoImage]] = None) -> Optional[PhotoImage]:
-    if output is not None:
-        output.append(PhotoImage(file=get_input_img_file(func)))
-        return None
-
-    return PhotoImage(file=get_input_img_file(func))
-
-
-def get_all_input_imgs(output: Optional[list[PhotoImage]] = None) -> Optional[list[PhotoImage]]:
-    if output is not None:
-        for input_src in INPUT_GATES:
-            get_input_img(input_src, output)
-        return None
-
-    return [get_input_img(input_src) for input_src in INPUT_GATES]
-
 """
+
+
+# Add new gates to this list
+# If you change the order of these gates, then the order must be the same in gui_build_input_selection_menu()
 ######################### Testing Class ################################################################################
 class Input:
+    """The barest form of the input class, just does the output"""
     def __init__(self, func, ins: Optional[list] = None, out: int = NULL):
         self.func = func
         self.inputs = ins if ins is not None else []
@@ -245,10 +246,10 @@ def test_full_adder():
 
         print("Inputs:", input_list)
         print("Sum: {0} Carry: {1}".format(int(sum1), int(carry)))
-"""
 
 
 def get_line_fill(value: int) -> str:
+    """Gets what color a line should be based on its value"""
     if value == NULL or not bool(InputTk.line_colors_on):
         return InputTk.line_fill_null
     elif value == TRUE:
@@ -258,12 +259,13 @@ def get_line_fill(value: int) -> str:
 
 
 class InputTk:
+    """Class used to depict a logic gate.  Each has an associated function and image"""
     line_colors_on = True
     line_fill_true = "green"
     line_fill_false = "red"
     line_fill_null = "black"
 
-    def __init__(self, func, label: str = "", canvas: Optional[Canvas] = None,
+    def __init__(self, func, gate_info_repo,  label: str = "", canvas: Optional[Canvas] = None,
                  center: (int, int) = (NULL, NULL), ins: Optional[list] = None,
                  out: int = NULL, dims: (int, int) = (0, 0)):
         self.func = func
@@ -271,8 +273,7 @@ class InputTk:
         self.inputs = ins if ins is not None else []
         self.out = out  # Output value
         self.output_gates = []
-        self.img = get_input_img(func)
-        self.img_path = get_input_img_file(func)
+        self.img = PhotoImage(file=gate_info_repo[func]["image_file"])
         self.center = center
         self.border_width = 1  # Width of border when gate is selected
         # If this is an output gate, make the border box larger to increase visibility
@@ -470,9 +471,6 @@ class InputTk:
     def image(self) -> PhotoImage:
         return self.img
 
-    def image_path(self) -> str:
-        return self.img_path
-
     def move(self, x: int, y: int) -> None:
         self.center = (x, y)
         # Move Gate Image and Border
@@ -551,11 +549,12 @@ class ClockTimer:
 
 class ClockTk(InputTk):
     """An alternating power source, which toggles after self.rate seconds have passed"""
-
     clocks_paused = True
-    def __init__(self, update_rate: float, label: str = "", canvas: Optional[Canvas] = None,
+
+    def __init__(self, gate_info_repo, update_rate: float, label: str = "", canvas: Optional[Canvas] = None,
                  center: (int, int) = (NULL, NULL), default_state: int = TRUE):
-        super().__init__(logic_clock, label, canvas, center, ins=None, out=default_state)  # A clock has not inputs
+        # A clock has no inputs
+        super().__init__(logic_clock, gate_info_repo, label, canvas, center, ins=None, out=default_state)
         self.timer = ClockTimer(logic_clock, update_rate, self)
         self.rate = update_rate
         self.default_state = default_state
@@ -661,3 +660,72 @@ def connection_exists(gate1: InputTk, gate2: InputTk) -> bool:
 
 def is_parent(parent: InputTk, child: InputTk) -> bool:
     return list_contains(child.get_all_input_gates([]), parent)[0]
+
+
+class GateInfo:
+    def __init__(self, func: Callable, name: Optional[str] = None, desc: str = "", image_file: Optional[str] = None,
+                 callback: Optional[Callable] = None):
+        self.info = {
+            "func": func,
+            "name": name if name is not None else func.__name__,
+            "desc": desc if desc is not None else "",
+            "callback": callback,
+            "image_file": image_file if image_file is not None else ""
+        }
+        self.active_gates = []
+
+    def add_active_gate(self, gate: InputTk) -> None:
+        self.active_gates.append(gate)
+
+    def get_active_gates(self) -> list[InputTk]:
+        return self.active_gates
+
+    def remove(self, gate: InputTk) -> None:
+        if gate in self.active_gates:
+            self.active_gates.remove(gate)
+
+    def keys(self):
+        return self.info.keys()
+
+    def __getitem__(self, item: str) -> Union[str | Callable]:
+        return self.info[item]
+
+    def __setitem__(self, key: str, value: Union[str | Callable]) -> None:
+        self.info[key] = value
+
+
+class GatesInfoRepo:
+    def __init__(self):
+        self.gate_infos = {}
+        self.funcs_dispatch = {}
+
+    def register_gate(self, func: Callable, **kwargs) -> None:
+        self.gate_infos[func] = GateInfo(func, **kwargs)
+        self.funcs_dispatch[func.__name__] = func
+
+    def add_gate(self, gate: InputTk):
+        if gate.get_func() in self.gate_infos.keys():
+            self.gate_infos[gate.get_func()].add_active_gate(gate)
+        else:
+            self.register_gate(gate.get_func(), name=None, desc=None, callback=None)
+            self.gate_infos[gate.get_func()].add_active_gate(gate)
+
+    def get_gates(self, func: Callable) -> Optional[list[InputTk]]:
+        if func in self.gate_infos.keys():
+            return self.gate_infos[func].get_active_gates()
+        return None
+
+    def keys(self):
+        return self.gate_infos.keys()
+
+    def __getitem__(self, item: Union[Callable | str]) -> Union[GateInfo | Callable]:
+        if isinstance(item, Callable):
+            return self.gate_infos[item]
+        elif isinstance(item, str):
+            return self.funcs_dispatch[item]
+
+    def __setitem__(self, key: Callable, value: GateInfo) -> None:
+        self.gate_infos[key] = value
+
+    def __len__(self):
+        return len(self.keys())
