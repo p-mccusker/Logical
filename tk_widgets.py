@@ -215,12 +215,12 @@ class CheckbuttonTable(LabelFrame):
         entry.destroy()
         self.entries.remove(entry)
 
-        # Subtract one from each checkbutton label number
-        for (i, entry) in enumerate(self.entries):
-            if entry.has_default_name:  # If the gate's name hasn't been set yet, then update its number
-                cutoff_index = entry.gate.get_label().find('#')
-                stripped_label = entry.gate.get_label()[:cutoff_index+1]
-                self.entries[i].update_text(stripped_label + str(i+1))
+        # # Subtract one from each checkbutton label number
+        # for (i, entry) in enumerate(self.entries):
+        #     if entry.has_default_name:  # If the gate's name hasn't been set yet, then update its number
+        #         cutoff_index = entry.gate.get_label().find('#')
+        #         stripped_label = entry.gate.get_label()[:cutoff_index+1]
+        #         self.entries[i].update_text(stripped_label + str(i+1))
 
         if len(self.entries) == 0:
             self.empty_text_label.grid()

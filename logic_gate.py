@@ -114,7 +114,7 @@ def logic_clock(gate) -> int:
 
 
 # Folder for button images
-IMG_FOLDER = "./images"
+IMG_FOLDER = "images"
 
 """
 def get_logic_func_from_name(name: str) -> Optional[Callable]:
