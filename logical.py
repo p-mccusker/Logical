@@ -11,9 +11,8 @@
 #   - Proper resizing of side pane on font changes
 #   - Method of creating custom circuits to be place and used as other gates
 ########################################################################################################################
-import platform
 import os
-import tkinter
+import platform
 from tkinter import filedialog as fd
 
 import tomlkit
@@ -441,7 +440,7 @@ class Application(Tk):
                 self.gates[self.active_input.get_func()].add_active_gate(InputTk(self.active_input.get_func(),
                                                                                  gate_info_repo=self.gates,
                                                                                  label=self.active_input.get_label() +
-                                                                                 str(inst_num),
+                                                                                       str(inst_num),
                                                                                  canvas=self.screen_icb,
                                                                                  center=(event.x, event.y),
                                                                                  out=self.active_input.out,
@@ -456,7 +455,7 @@ class Application(Tk):
             if is_power_gate(last_input):
                 self.is_edit_table.add_entry(last_input)
 
-    def save(self) -> None:
+    def save(self, event: Optional[Event] = None) -> None:
         """Save the current circuit to a file, if this is the first save, prompt for file name"""
         if self.filename == "":  # If the program has not been saved before, prompt for filename
             log_msg(INFO, "No save file has been specified.")
@@ -509,12 +508,11 @@ class Application(Tk):
 
     def save_as(self):
         """Create save file prompt and set self.filename to this file"""
-        # using with statement
         self.filename = fd.asksaveasfilename(initialfile=self.filename, initialdir=self.save_path,
                                              filetypes=[("Circuit Diagram", "*" + self.file_type)])
 
-    def open(self):
-        """"Load circuit from file"""
+    def open(self, event: Optional[Event] = None) -> None:
+        """"Load circuit from file.  Eventually use tomlkit to create nicelly formatted file."""
         self.filename = fd.askopenfilename(initialdir=self.save_path,
                                            filetypes=[("Circuit Diagram", "*" + self.file_type)])
 
@@ -602,7 +600,7 @@ class Application(Tk):
                             connect_gates(current_gate, gate)
                             break
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear the canvas, clear all entries from the power table, and delete all gates"""
         self.deselect_active_gates()
         self.reset()
@@ -621,9 +619,6 @@ class Application(Tk):
         self.screen_icb.delete('all')
         self.filename = ""
 
-    def about(self):
-        pass
-
     def help(self) -> None:
         self.help_window = Toplevel(self)
         self.help_window.title("Help")
@@ -638,51 +633,73 @@ class Application(Tk):
         self.help_window.transient(self)
 
         scrollable_frame = Frame(self.help_window)
-        scrollable_frame.grid(padx=(10, 10), pady=(10, 10),  sticky='news')
+        scrollable_frame.grid(padx=(10, 10), pady=(10, 10), sticky='news')
 
         # Shortcut Entries #############################################################################################
         shortcut_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Shortcuts")
-        shortcut_labelframe.grid(column=0, row=0, sticky='news')
+        shortcut_labelframe.grid(column=0, row=0, sticky='news', pady=(0, 5))
         shortcut_entry_width = 15
         drag_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Select Gate:", entry_text="Left Click",
                                           entry_width=shortcut_entry_width, widget_font=self.active_font, disabled=True)
         drag_gate_shortcut.grid(row=0, column=0, sticky='nse', pady=(0, 5))
 
-        multi_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Multi-Select Gate:", entry_width=shortcut_entry_width,
+        multi_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Multi-Select Gate:",
+                                           entry_width=shortcut_entry_width,
                                            entry_text="Ctrl + Left Click", widget_font=self.active_font, disabled=True)
         multi_gate_shortcut.grid(row=1, column=0, sticky='nse', pady=(0, 5))
 
-        connect_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Connect Gate:", entry_text="Right Click", entry_width=shortcut_entry_width,
+        connect_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Connect Gate:", entry_text="Right Click",
+                                             entry_width=shortcut_entry_width,
                                              widget_font=self.active_font, disabled=True)
         connect_gate_shortcut.grid(row=2, column=0, sticky='nse', pady=(0, 5))
 
-        delete_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Delete Gate:", entry_text="Backspace", entry_width=shortcut_entry_width,
-                                            widget_font=self.active_font, disabled=True)
-        delete_gate_shortcut.grid(row=3, column=0, sticky='nse', pady=(0, 5))
-
-        clear_connection_shortcut = LabeledEntry(shortcut_labelframe, label_text="Clear Connection:", entry_text="c", entry_width=shortcut_entry_width,
+        clear_gate_image_shortcut = LabeledEntry(shortcut_labelframe, label_text="Clear Button Press:",
+                                                 entry_text="Right Click", entry_width=shortcut_entry_width,
                                                  widget_font=self.active_font, disabled=True)
-        clear_connection_shortcut.grid(row=4, column=0, sticky='nse', pady=(0, 5))
+        clear_gate_image_shortcut.grid(row=3, column=0, sticky='nse', pady=(0, 5))
 
-        start_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Start Clocks:", entry_text="p", entry_width=shortcut_entry_width,
+        delete_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Delete Gate:", entry_text="Backspace",
+                                            entry_width=shortcut_entry_width,
+                                            widget_font=self.active_font, disabled=True)
+        delete_gate_shortcut.grid(row=4, column=0, sticky='nse', pady=(0, 5))
+
+        clear_connection_shortcut = LabeledEntry(shortcut_labelframe, label_text="Clear Connection:", entry_text="c",
+                                                 entry_width=shortcut_entry_width,
+                                                 widget_font=self.active_font, disabled=True)
+        clear_connection_shortcut.grid(row=5, column=0, sticky='nse', pady=(0, 5))
+
+        start_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Start Clocks:", entry_text="p",
+                                             entry_width=shortcut_entry_width,
                                              widget_font=self.active_font, disabled=True)
         start_clocks_shortcut.grid(row=0, column=1, sticky='nse', pady=(0, 5))
 
-        stop_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Stop Clocks:", entry_text="t", entry_width=shortcut_entry_width,
+        stop_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Stop Clocks:", entry_text="t",
+                                            entry_width=shortcut_entry_width,
                                             widget_font=self.active_font, disabled=True)
         stop_clocks_shortcut.grid(row=1, column=1, sticky='nse', pady=(0, 5))
 
-        toggle_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Toggle Clocks:", entry_text="Space", entry_width=shortcut_entry_width,
+        toggle_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Toggle Clocks:", entry_text="Space",
+                                              entry_width=shortcut_entry_width,
                                               widget_font=self.active_font, disabled=True)
         toggle_clocks_shortcut.grid(row=2, column=1, sticky='nse', pady=(0, 5))
 
-        reset_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Reset Clocks:", entry_text="r", entry_width=shortcut_entry_width,
+        reset_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Reset Clocks:", entry_text="r",
+                                             entry_width=shortcut_entry_width,
                                              widget_font=self.active_font, disabled=True)
         reset_clocks_shortcut.grid(row=3, column=1, sticky='nse', pady=(0, 5))
+
+        save_shortcut = LabeledEntry(shortcut_labelframe, label_text="Save:", entry_text="Ctrl + s",
+                                     entry_width=shortcut_entry_width,
+                                     widget_font=self.active_font, disabled=True)
+        save_shortcut.grid(row=4, column=1, sticky='nse', pady=(0, 5))
+        save_shortcut = LabeledEntry(shortcut_labelframe, label_text="Open:", entry_text="Ctrl + o",
+                                     entry_width=shortcut_entry_width,
+                                     widget_font=self.active_font, disabled=True)
+        save_shortcut.grid(row=5, column=1, sticky='nse', pady=(0, 5))
         ################################################################################################################
         # Line Colors ############################################################################################
         line_color_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Line Colors")
-        line_color_labelframe.grid(row=1, column=0, sticky='news')
+        line_color_labelframe.grid(row=1, column=0, sticky='news', pady=(0, 5))
 
         powered_label = LabeledEntry(line_color_labelframe, label_text="Green",
                                      entry_text="This line is receiving power", widget_font=self.active_font,
@@ -696,43 +713,51 @@ class Application(Tk):
         unpowered_label.grid(row=0, column=1, padx=(5, 5), pady=(5, 5))
         missing_power_label = LabeledEntry(line_color_labelframe, label_text="Black",
                                            entry_text="This line is missing an input and is neither on or off.",
-                                           widget_font=self.active_font, entry_width=25, entry_height=2,
+                                           widget_font=self.active_font, entry_width=30, entry_height=2,
                                            label_background="black", label_foreground='white', disabled=True)
-        missing_power_label.grid(row=1, columnspan=2, padx=(0, 0), pady=(0, 0))
+        missing_power_label.grid(row=1, columnspan=2, padx=(0, 0), pady=(0, 5))
 
         # Gate Descriptions ############################################################################################
         desc_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Gate Descriptions")
         desc_labelframe.grid(row=2, column=0, sticky='news', padx=(0, 0), pady=(5, 5))
 
-        power_desc = PictureDescription(desc_labelframe, img=self.gates[power]["image"], desc_text=self.gates[power]["desc"],
+        power_desc = PictureDescription(desc_labelframe, img=self.gates[power]["image"],
+                                        desc_text=self.gates[power]["desc"],
                                         text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         power_desc.grid(row=0, column=0)
 
-        not_desc = PictureDescription(desc_labelframe, img=self.gates[logic_not]["image"], desc_text=self.gates[logic_not]["desc"],
+        not_desc = PictureDescription(desc_labelframe, img=self.gates[logic_not]["image"],
+                                      desc_text=self.gates[logic_not]["desc"],
                                       text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         not_desc.grid(row=0, column=1)
 
-        and_desc = PictureDescription(desc_labelframe, img=self.gates[logic_and]["image"], desc_text=self.gates[logic_and]["desc"],
+        and_desc = PictureDescription(desc_labelframe, img=self.gates[logic_and]["image"],
+                                      desc_text=self.gates[logic_and]["desc"],
                                       text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         and_desc.grid(row=1, column=0)
 
-        nand_desc = PictureDescription(desc_labelframe, img=self.gates[logic_nand]["image"], desc_text=self.gates[logic_nand]["desc"],
+        nand_desc = PictureDescription(desc_labelframe, img=self.gates[logic_nand]["image"],
+                                       desc_text=self.gates[logic_nand]["desc"],
                                        text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         nand_desc.grid(row=1, column=1)
 
-        or_desc = PictureDescription(desc_labelframe, img=self.gates[logic_or]["image"], desc_text=self.gates[logic_or]["desc"],
+        or_desc = PictureDescription(desc_labelframe, img=self.gates[logic_or]["image"],
+                                     desc_text=self.gates[logic_or]["desc"],
                                      text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         or_desc.grid(row=2, column=0)
 
-        xor_desc = PictureDescription(desc_labelframe, img=self.gates[logic_xor]["image"], desc_text=self.gates[logic_xor]["desc"],
+        xor_desc = PictureDescription(desc_labelframe, img=self.gates[logic_xor]["image"],
+                                      desc_text=self.gates[logic_xor]["desc"],
                                       text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         xor_desc.grid(row=2, column=1)
 
-        output_desc = PictureDescription(desc_labelframe, img=self.gates[output]["image"], desc_text=self.gates[output]["desc"],
+        output_desc = PictureDescription(desc_labelframe, img=self.gates[output]["image"],
+                                         desc_text=self.gates[output]["desc"],
                                          text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         output_desc.grid(row=3, column=0)
 
-        clock_desc = PictureDescription(desc_labelframe, img=self.gates[logic_clock]["image"], desc_text=self.gates[logic_clock]["desc"],
+        clock_desc = PictureDescription(desc_labelframe, img=self.gates[logic_clock]["image"],
+                                        desc_text=self.gates[logic_clock]["desc"],
                                         text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         clock_desc.grid(row=3, column=1, padx=(25, 0))
         # self.update_idletasks()
@@ -884,6 +909,8 @@ class Application(Tk):
         self.screen_icb.bind('<Button-3>', self.right_click_cb)
         self.screen_icb.bind('<KeyRelease-BackSpace>', self.delete_cb)
         self.screen_icb.bind('<Control-Button-1>', self.multi_select_cb)
+        self.screen_icb.bind('<Control-s>', self.save)
+        self.screen_icb.bind('<Control-o>', self.save)
         self.screen_icb.bind('<c>', self.remove_connection_cb)
         self.screen_icb.bind('<r>', self.reset)
         self.screen_icb.bind('<p>', self.play)
@@ -916,7 +943,6 @@ class Application(Tk):
         self.icb_menubar.add_cascade(label="Run", menu=edit_menu, font=self.font_top)
 
         help_menu.add_command(label="Help", command=self.help, font=self.font_top)
-        help_menu.add_command(label="About...", command=self.about, font=self.font_top)
 
         self.icb_menubar.add_cascade(label="Help", menu=help_menu, font=self.font_top)
 

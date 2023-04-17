@@ -59,7 +59,8 @@ class LabeledEntry(Frame):
     """Widget containing a label to the left of a entry"""
 
     def __init__(self, *arg, label_text: str = "", entry_text: str = "", entry_var: Optional[StringVar] = None,
-                 entry_width: Optional[int] = None,  entry_height: int = 1, widget_font: Optional[str | font.Font] = None,
+                 entry_width: Optional[int] = None, entry_height: int = 1,
+                 widget_font: Optional[str | font.Font] = None,
                  label_background: Optional[str] = None, label_foreground: Optional[str] = None,
                  disabled: bool = False, **kwargs):
         Frame.__init__(self, *arg, **kwargs)
@@ -293,7 +294,7 @@ class ScrollableFrame(Frame):
 
     def __init__(self, *args, this_font: font.Font, **kwargs):
         Frame.__init__(self, *args, **kwargs)
-        self.canvas = Canvas(self, highlightthickness=0,)
+        self.canvas = Canvas(self, highlightthickness=0, )
         self.frame = Frame(self.canvas)
         self.vsb = Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.vsb.set)

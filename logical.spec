@@ -5,7 +5,7 @@ block_cipher = None
 
 
 a = Analysis(
-    ['circuit.py'],
+    ['logical.py'],
     pathex=[],
     binaries=[],
     datas=[('images/*.png', 'images')],
