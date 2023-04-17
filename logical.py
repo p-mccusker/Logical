@@ -48,19 +48,23 @@ def do_overlap(l1: (int, int), r1: (int, int), l2: (int, int), r2: (int, int)) -
     return True
 
 
-def join_folder_file(folder: str, file: str):
-    return os.path.join(folder, file)
-
-
 def resource_path(relative_path: str) -> str:
     """ Get absolute path to resource, works for dev and for PyInstaller """
+    base_path = ""
     try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS if Windows or _MEIDrqOib if Linux
+        if platform.system() == "Windows":
+            base_path = sys._MEIPASS
+        elif platform.system() == "Linux":
+            base_path = sys._MEIDrqOib
+    except AttributeError:
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+
+
+def join_folder_file(folder: str, file: str):
+    return resource_path(os.path.join(folder, file))
 
 
 class Application(Tk):
@@ -69,7 +73,6 @@ class Application(Tk):
     max_selectable_gates = 100
     border_width = 3  # Width of border separating canvas from the right pane
     input_selection_screen_width = 250  # Width of the right pane
-    # bg_colors = ["white", "black", "red", "green", "blue", "cyan", "yellow", "magenta"]
     # Fonts #####################
     font_family = "Helvetica"
     font_size = 12
@@ -98,7 +101,7 @@ class Application(Tk):
         self.x = self.width / 2
         self.y = self.height / 2
         self.background_color = StringVar(value="white")
-        self.icon = PhotoImage(file=resource_path(join_folder_file(IMG_FOLDER, "icon.png")))
+        self.icon = PhotoImage(file=join_folder_file(IMG_FOLDER, "icon.png"))
 
         self.title("Logical")
         self.geometry(str(self.width) + "x" + str(self.height))
@@ -106,7 +109,9 @@ class Application(Tk):
         self.config(background=self.background_color.get())
         self.iconphoto(True, self.icon)
 
-        self.imgs = []  # [PhotoImage(file=self.gates[func]["image_file"]) for func in self.gates.keys()]
+        # List to hold references to the Photoimages of the input gates so that Tkinter doesn't garbage collect
+        # prematurely
+        self.imgs = []
         # Dictionary to hold the input gates, where the gate type is the key and the value is the list of gates
         self.gates = GatesInfoRepo()
         self.build_gate_repo()
@@ -114,9 +119,6 @@ class Application(Tk):
         if platform.system() == "Windows":
             from ctypes import windll
             windll.shcore.SetProcessDpiAwareness(1)
-
-        # List to hold references to the Photoimages of the input gates so that Tkinter doesn't garbage collect
-        # prematurely
 
         self.default_update_rate = 2  # Default Update for a new clock in seconds, default to 2s
 
@@ -189,37 +191,37 @@ class Application(Tk):
         self.gates.register_gate(power, name=None,
                                  desc="This power source is either powered or not. It takes no inputs.",
                                  callback=self.set_active_fn_power,
-                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "power.png")))
+                                 image_file=join_folder_file(IMG_FOLDER, "power.png"))
         self.gates.register_gate(logic_not, name=None,
                                  desc="The NOT gate inverts what it receives as input. It requires one input.",
                                  callback=self.set_active_fn_not,
-                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "not.png")))
+                                 image_file=join_folder_file(IMG_FOLDER, "not.png"))
         self.gates.register_gate(logic_and, name=None,
                                  desc="The AND gate outputs power only if all of its inputs are powered as well. "
                                       "It requires at least two inputs.",
                                  callback=self.set_active_fn_and,
-                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "and.png")))
+                                 image_file=join_folder_file(IMG_FOLDER, "and.png"))
         self.gates.register_gate(logic_nand, name=None,
                                  desc="The NAND gate outputs power if not every input is powered. "
                                       "It requires at least two inputs.",
                                  callback=self.set_active_fn_nand,
-                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "nand.png")))
+                                 image_file=join_folder_file(IMG_FOLDER, "nand.png"))
         self.gates.register_gate(logic_or, name=None,
                                  desc="The OR gate outputs power if at least one input is powered. "
                                       "It requires at least two inputs.", callback=self.set_active_fn_or,
-                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "or.png")))
+                                 image_file=join_folder_file(IMG_FOLDER, "or.png"))
         self.gates.register_gate(logic_xor, name=None,
                                  desc="The XOR gate outputs power if at least one, but not all, inputs are powered. "
                                       "It requires at least two inputs",
                                  callback=self.set_active_fn_xor,
-                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "xor.png")))
+                                 image_file=join_folder_file(IMG_FOLDER, "xor.png"))
         self.gates.register_gate(output, name=None, desc="The output gate has the same output as its input. "
                                                          "This gate requires one input and has no outputs.",
                                  callback=self.set_active_fn_output,
-                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "output.png")))
+                                 image_file=join_folder_file(IMG_FOLDER, "output.png"))
         self.gates.register_gate(logic_clock, name=None, desc="This clock turns on/off at a constant rate. "
                                                               "It has no inputs.", callback=self.set_active_fn_clock,
-                                 image_file=resource_path(join_folder_file(IMG_FOLDER, "clock.png")))
+                                 image_file=join_folder_file(IMG_FOLDER, "clock.png"))
 
     def update_font(self, family: str, size: int) -> None:
         self.font_family = family
@@ -243,7 +245,7 @@ class Application(Tk):
         elif platform.system() == "Linux":  # Else assume this is linux
             self.preference_path = os.path.join(self.user_home_dir, ".config", "logical")
             self.save_path = os.path.join(self.preference_path, "circuits")
-        else:  # If on Mac or some other OS, then just write settings to home directory
+        else:  # If on Mac or some other OS, then just write settings to directory in user home
             self.preference_path = os.path.join(self.user_home_dir, "logical")
             self.save_path = os.path.join(self.preference_path, "circuits")
 
