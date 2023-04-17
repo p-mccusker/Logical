@@ -33,14 +33,19 @@ def reconfig_font(this_font: font.Font, offset: int, weight: Optional[str] = Non
 
 class PictureDescription(Frame):
     def __init__(self, *args, img: PhotoImage, desc_text: str, text_width: int, text_height: int, this_font: font.Font,
-                 **kwargs):
+                 scrollbar_on: bool = True, **kwargs):
         Frame.__init__(self, *args, **kwargs)
         self.img = img
         self.img_label = Label(self, image=self.img)
         self.this_font = this_font
         self.img_label.grid(row=0, column=0, padx=(0, 0), pady=(0, 0), sticky='nsw')
-        self.description = scrolledtext.ScrolledText(self, wrap=tkinter.WORD, width=text_width, height=text_height,
-                                                     font=self.this_font)
+        self.scrollbar_on = scrollbar_on
+        if scrollbar_on:
+            self.description = scrolledtext.ScrolledText(self, wrap=tkinter.WORD, width=text_width, height=text_height,
+                                                         font=self.this_font)
+        else:
+            self.description = tkinter.Text(self, wrap=tkinter.WORD, width=text_width, height=text_height,
+                                            font=self.this_font)
         self.description.grid(row=0, column=1, padx=(0, 0), pady=(0, 0), sticky='nse')
         self.description.insert(tkinter.INSERT, desc_text)
         self.description.configure(state='disabled')
@@ -54,12 +59,20 @@ class LabeledEntry(Frame):
     """Widget containing a label to the left of a entry"""
 
     def __init__(self, *arg, label_text: str = "", entry_text: str = "", entry_var: Optional[StringVar] = None,
-                 entry_width: Optional[int] = None, widget_font: Optional[str | font.Font] = None, **kwargs):
+                 entry_width: Optional[int] = None,  entry_height: int = 1, widget_font: Optional[str | font.Font] = None,
+                 label_background: Optional[str] = None, label_foreground: Optional[str] = None,
+                 disabled: bool = False, **kwargs):
         Frame.__init__(self, *arg, **kwargs)
-        self.label = Label(self, text=label_text)
-        self.label.grid(row=0, column=0)
+        self.label = Label(self, text=label_text, background=label_background, foreground=label_foreground)
+        self.label.grid(row=0, column=0, sticky='news')
         self.entry_var = StringVar(value=entry_text) if entry_var is None else entry_var
-        self.entry = Entry(self, textvariable=self.entry_var, background='white')
+        if not disabled:
+            self.entry = Entry(self, textvariable=self.entry_var, background='white', width=entry_width)
+        else:
+            self.entry = tkinter.Text(self, font=widget_font, background='white', width=20, wrap=tkinter.WORD,
+                                      height=entry_height)
+            self.entry.insert(tkinter.INSERT, entry_text)
+            self.entry.configure(state='disabled')
 
         if entry_width is not None:
             self.entry.config(width=entry_width)
@@ -224,13 +237,6 @@ class CheckbuttonTable(LabelFrame):
         entry.destroy()
         self.entries.remove(entry)
 
-        # # Subtract one from each checkbutton label number
-        # for (i, entry) in enumerate(self.entries):
-        #     if entry.has_default_name:  # If the gate's name hasn't been set yet, then update its number
-        #         cutoff_index = entry.gate.get_label().find('#')
-        #         stripped_label = entry.gate.get_label()[:cutoff_index+1]
-        #         self.entries[i].update_text(stripped_label + str(i+1))
-
         if len(self.entries) == 0:
             self.empty_text_label.grid()
             self.null = True
@@ -285,7 +291,7 @@ class CheckbuttonTable(LabelFrame):
 
 class ScrollableFrame(Frame):
 
-    def __init__(self, *args, this_font: font.Font,  **kwargs):
+    def __init__(self, *args, this_font: font.Font, **kwargs):
         Frame.__init__(self, *args, **kwargs)
         self.canvas = Canvas(self, highlightthickness=0,)
         self.frame = Frame(self.canvas)
@@ -294,13 +300,12 @@ class ScrollableFrame(Frame):
 
         self.this_font = this_font
 
-        self.vsb.grid(row=0, column=1, sticky='nse', pady=(0, 0))
+        self.vsb.grid(row=0, column=1, sticky='nse', pady=(0, 0), rowspan=4)
         self.canvas.grid(row=0, column=0, sticky='nws', padx=(0, 0))
 
-        self.canvas.create_window((1, 1), window=self.frame, anchor="nw", tags="self.frame")
+        self.canvas.create_window((0, 0), window=self.frame, anchor="nw", tags="self.frame")
         self.frame.bind("<Configure>", self.on_frame_configure)
 
     def on_frame_configure(self, event):
         """Reset the scroll region to encompass the inner frame"""
-        # self.canvas.config(width=self.winfo_reqwidth() - 25)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))

@@ -13,6 +13,7 @@
 ########################################################################################################################
 import platform
 import os
+import tkinter
 from tkinter import filedialog as fd
 
 import tomlkit
@@ -187,23 +188,38 @@ class Application(Tk):
         """Compiles repository for gates, the active ones, their names, and descriptions.  When adding new functions,
         register them here"""
         self.gates.register_gate(power, name=None,
-                                 desc="This is a discrete power source.  It is either on and off and can be toggled by "
-                                      "clicking on the Power Gate Table",
+                                 desc="This power source is either powered or not. It takes no inputs.",
                                  callback=self.set_active_fn_power,
                                  image_file=resource_path(join_folder_file(IMG_FOLDER, "power.png")))
-        self.gates.register_gate(logic_not, name=None, desc="", callback=self.set_active_fn_not,
+        self.gates.register_gate(logic_not, name=None,
+                                 desc="The NOT gate inverts what it receives as input. It requires one input.",
+                                 callback=self.set_active_fn_not,
                                  image_file=resource_path(join_folder_file(IMG_FOLDER, "not.png")))
-        self.gates.register_gate(logic_and, name=None, desc="", callback=self.set_active_fn_and,
+        self.gates.register_gate(logic_and, name=None,
+                                 desc="The AND gate outputs power only if all of its inputs are powered as well. "
+                                      "It requires at least two inputs.",
+                                 callback=self.set_active_fn_and,
                                  image_file=resource_path(join_folder_file(IMG_FOLDER, "and.png")))
-        self.gates.register_gate(logic_nand, name=None, desc="", callback=self.set_active_fn_nand,
+        self.gates.register_gate(logic_nand, name=None,
+                                 desc="The NAND gate outputs power if not every input is powered. "
+                                      "It requires at least two inputs.",
+                                 callback=self.set_active_fn_nand,
                                  image_file=resource_path(join_folder_file(IMG_FOLDER, "nand.png")))
-        self.gates.register_gate(logic_or, name=None, desc="", callback=self.set_active_fn_or,
+        self.gates.register_gate(logic_or, name=None,
+                                 desc="The OR gate outputs power if at least one input is powered. "
+                                      "It requires at least two inputs.", callback=self.set_active_fn_or,
                                  image_file=resource_path(join_folder_file(IMG_FOLDER, "or.png")))
-        self.gates.register_gate(logic_xor, name=None, desc="", callback=self.set_active_fn_xor,
+        self.gates.register_gate(logic_xor, name=None,
+                                 desc="The XOR gate outputs power if at least one, but not all, inputs are powered. "
+                                      "It requires at least two inputs",
+                                 callback=self.set_active_fn_xor,
                                  image_file=resource_path(join_folder_file(IMG_FOLDER, "xor.png")))
-        self.gates.register_gate(output, name=None, desc="", callback=self.set_active_fn_output,
+        self.gates.register_gate(output, name=None, desc="The output gate has the same output as its input. "
+                                                         "This gate requires one input and has no outputs.",
+                                 callback=self.set_active_fn_output,
                                  image_file=resource_path(join_folder_file(IMG_FOLDER, "output.png")))
-        self.gates.register_gate(logic_clock, name=None, desc="", callback=self.set_active_fn_clock,
+        self.gates.register_gate(logic_clock, name=None, desc="This clock turns on/off at a constant rate. "
+                                                              "It has no inputs.", callback=self.set_active_fn_clock,
                                  image_file=resource_path(join_folder_file(IMG_FOLDER, "clock.png")))
 
     def update_font(self, family: str, size: int) -> None:
@@ -612,57 +628,118 @@ class Application(Tk):
         self.help_window = Toplevel(self)
         self.help_window.title("Help")
         self.help_window.resizable(False, False)
-        # self.help_window.geometry("800x600")
+
+        win_x = self.winfo_rootx() + self.width // 3
+        win_y = 0
+        self.help_window.geometry(f'+{win_x}+{win_y}')
 
         self.help_window.wait_visibility()
         self.help_window.grab_set()
         self.help_window.transient(self)
 
-        scrollable_frame = ScrollableFrame(self.help_window, this_font=self.active_font, width=800, height=600)
-        scrollable_frame.grid(row=0, column=0, padx=(0, 20), sticky='news')
+        scrollable_frame = Frame(self.help_window)
+        scrollable_frame.grid(padx=(10, 10), pady=(10, 10),  sticky='news')
 
-        # shortcut_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Shortcuts")
-        # shortcut_labelframe.grid(row=0, column=0, sticky='new')
+        # Shortcut Entries #############################################################################################
+        shortcut_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Shortcuts")
+        shortcut_labelframe.grid(column=0, row=0, sticky='news')
+        shortcut_entry_width = 15
+        drag_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Select Gate:", entry_text="Left Click",
+                                          entry_width=shortcut_entry_width, widget_font=self.active_font, disabled=True)
+        drag_gate_shortcut.grid(row=0, column=0, sticky='nse', pady=(0, 5))
 
-        desc_labelframe = LabelFrame(scrollable_frame.frame, font=self.active_font, text="Gate Descriptions")
-        desc_labelframe.grid(row=1, column=0, sticky='news', padx=(10, 0), pady=(5, 5))
+        multi_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Multi-Select Gate:", entry_width=shortcut_entry_width,
+                                           entry_text="Ctrl + Left Click", widget_font=self.active_font, disabled=True)
+        multi_gate_shortcut.grid(row=1, column=0, sticky='nse', pady=(0, 5))
+
+        connect_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Connect Gate:", entry_text="Right Click", entry_width=shortcut_entry_width,
+                                             widget_font=self.active_font, disabled=True)
+        connect_gate_shortcut.grid(row=2, column=0, sticky='nse', pady=(0, 5))
+
+        delete_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Delete Gate:", entry_text="Backspace", entry_width=shortcut_entry_width,
+                                            widget_font=self.active_font, disabled=True)
+        delete_gate_shortcut.grid(row=3, column=0, sticky='nse', pady=(0, 5))
+
+        clear_connection_shortcut = LabeledEntry(shortcut_labelframe, label_text="Clear Connection:", entry_text="c", entry_width=shortcut_entry_width,
+                                                 widget_font=self.active_font, disabled=True)
+        clear_connection_shortcut.grid(row=4, column=0, sticky='nse', pady=(0, 5))
+
+        start_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Start Clocks:", entry_text="p", entry_width=shortcut_entry_width,
+                                             widget_font=self.active_font, disabled=True)
+        start_clocks_shortcut.grid(row=0, column=1, sticky='nse', pady=(0, 5))
+
+        stop_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Stop Clocks:", entry_text="t", entry_width=shortcut_entry_width,
+                                            widget_font=self.active_font, disabled=True)
+        stop_clocks_shortcut.grid(row=1, column=1, sticky='nse', pady=(0, 5))
+
+        toggle_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Toggle Clocks:", entry_text="Space", entry_width=shortcut_entry_width,
+                                              widget_font=self.active_font, disabled=True)
+        toggle_clocks_shortcut.grid(row=2, column=1, sticky='nse', pady=(0, 5))
+
+        reset_clocks_shortcut = LabeledEntry(shortcut_labelframe, label_text="Reset Clocks:", entry_text="r", entry_width=shortcut_entry_width,
+                                             widget_font=self.active_font, disabled=True)
+        reset_clocks_shortcut.grid(row=3, column=1, sticky='nse', pady=(0, 5))
+        ################################################################################################################
+        # Line Colors ############################################################################################
+        line_color_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Line Colors")
+        line_color_labelframe.grid(row=1, column=0, sticky='news')
+
+        powered_label = LabeledEntry(line_color_labelframe, label_text="Green",
+                                     entry_text="This line is receiving power", widget_font=self.active_font,
+                                     entry_width=25, entry_height=2, label_background="green", disabled=True)
+        powered_label.grid(row=0, column=0, padx=(5, 10), pady=(5, 5))
+
+        unpowered_label = LabeledEntry(line_color_labelframe, label_text=" Red ",
+                                       entry_text="This line is not receiving power", widget_font=self.active_font,
+                                       entry_width=25, entry_height=2,
+                                       label_background="red", disabled=True)
+        unpowered_label.grid(row=0, column=1, padx=(5, 5), pady=(5, 5))
+        missing_power_label = LabeledEntry(line_color_labelframe, label_text="Black",
+                                           entry_text="This line is missing an input and is neither on or off.",
+                                           widget_font=self.active_font, entry_width=25, entry_height=2,
+                                           label_background="black", label_foreground='white', disabled=True)
+        missing_power_label.grid(row=1, columnspan=2, padx=(0, 0), pady=(0, 0))
+
+        # Gate Descriptions ############################################################################################
+        desc_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Gate Descriptions")
+        desc_labelframe.grid(row=2, column=0, sticky='news', padx=(0, 0), pady=(5, 5))
 
         power_desc = PictureDescription(desc_labelframe, img=self.gates[power]["image"], desc_text=self.gates[power]["desc"],
-                                        text_width=30, text_height=6, this_font=self.active_font)
+                                        text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         power_desc.grid(row=0, column=0)
 
         not_desc = PictureDescription(desc_labelframe, img=self.gates[logic_not]["image"], desc_text=self.gates[logic_not]["desc"],
-                                      text_width=30, text_height=6, this_font=self.active_font)
+                                      text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         not_desc.grid(row=0, column=1)
 
         and_desc = PictureDescription(desc_labelframe, img=self.gates[logic_and]["image"], desc_text=self.gates[logic_and]["desc"],
-                                      text_width=30, text_height=6, this_font=self.active_font)
+                                      text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         and_desc.grid(row=1, column=0)
 
         nand_desc = PictureDescription(desc_labelframe, img=self.gates[logic_nand]["image"], desc_text=self.gates[logic_nand]["desc"],
-                                       text_width=30, text_height=6, this_font=self.active_font)
+                                       text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         nand_desc.grid(row=1, column=1)
 
         or_desc = PictureDescription(desc_labelframe, img=self.gates[logic_or]["image"], desc_text=self.gates[logic_or]["desc"],
-                                     text_width=30, text_height=6, this_font=self.active_font)
+                                     text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         or_desc.grid(row=2, column=0)
 
         xor_desc = PictureDescription(desc_labelframe, img=self.gates[logic_xor]["image"], desc_text=self.gates[logic_xor]["desc"],
-                                      text_width=30, text_height=6, this_font=self.active_font)
+                                      text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         xor_desc.grid(row=2, column=1)
 
         output_desc = PictureDescription(desc_labelframe, img=self.gates[output]["image"], desc_text=self.gates[output]["desc"],
-                                         text_width=30, text_height=6, this_font=self.active_font)
+                                         text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
         output_desc.grid(row=3, column=0)
 
         clock_desc = PictureDescription(desc_labelframe, img=self.gates[logic_clock]["image"], desc_text=self.gates[logic_clock]["desc"],
-                                        text_width=30, text_height=6, this_font=self.active_font)
-        clock_desc.grid(row=3, column=1)
+                                        text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
+        clock_desc.grid(row=3, column=1, padx=(25, 0))
+        # self.update_idletasks()
 
-        button_frame = Frame(self.help_window)
-        button_frame.grid(row=2, column=0, sticky='news')
-        done_button = Button(button_frame, text="Done", font=self.active_font, command=self.close_help)
-        done_button.grid(row=0, column=0)
+        done_button = Button(self.help_window, text="Done", font=self.active_font, command=self.close_help)
+        done_button.grid(columnspan=3, sticky='ew')
+        self.wait_window(self.help_window)
 
     def close_help(self) -> None:
         # Reset popup state
@@ -805,16 +882,12 @@ class Application(Tk):
         self.screen_icb.bind('<Button-1>', self.left_click_cb)
         self.screen_icb.bind('<B1-Motion>', self.click_and_drag_cb)
         self.screen_icb.bind('<Button-3>', self.right_click_cb)
-        self.screen_icb.bind('<Button-4>', self.delete_cb)
         self.screen_icb.bind('<KeyRelease-BackSpace>', self.delete_cb)
         self.screen_icb.bind('<Control-Button-1>', self.multi_select_cb)
         self.screen_icb.bind('<c>', self.remove_connection_cb)
         self.screen_icb.bind('<r>', self.reset)
-        self.screen_icb.bind('<F3>', self.reset)
         self.screen_icb.bind('<p>', self.play)
-        self.screen_icb.bind('<F1>', self.play)
-        self.screen_icb.bind('<P>', self.pause)
-        self.screen_icb.bind('<F2>', self.pause)
+        self.screen_icb.bind('<t>', self.pause)
         self.screen_icb.bind('<space>', self.toggle_play_pause)
         # Force the canvas to stay focused, keybindings only take effect when this widget has focus
         self.screen_icb.focus_force()
