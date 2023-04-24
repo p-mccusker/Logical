@@ -31,6 +31,43 @@ def reconfig_font(this_font: font.Font, offset: int, weight: Optional[str] = Non
                      slant=this_font["slant"] if slant is None else slant)
 
 
+class Popup(Menu):
+    """Two types of nested menu item invoking. 'click&drag' - click
+    and hold the menu item, move pointer to sub-menu item. Release the
+    button when it is over the sub-menu item. 'click&move' - click the
+    menu item (sub-menu appears), click the sub-menu item.
+
+    Controlled by *menumode* keyword arguemnt. 0 - click&move, 1 -
+    click&drag"""
+    menu_mode_default = 0
+
+    def __init__(self, *args, menu_mode=None, **kwargs):
+        super(Popup, self).__init__(*args, **kwargs)
+        menu_mode = self.menu_mode_default if menu_mode is None else menu_mode
+        if menu_mode:
+            self.bind('<FocusOut>', self.on_focus_out)
+        else:
+            self.bind('<Enter>', self.on_enter)
+        self.bind('<Escape>', self.on_focus_out)
+
+    def on_enter(self, event):
+        self.focus_set()
+
+    def post(self, *args, **kwargs):
+        super(Popup, self).post(*args, **kwargs)
+        self.focus_set()
+
+    def on_focus_out(self, event=None):
+        self.unpost()
+
+
+def make_sub_menu(parent: Menu, labels: list[str], callbacks: list[Callable] = None, **kwargs) -> Popup:
+    sub = Popup(parent, tearoff=0, **kwargs)
+    for (label1, cb) in zip(labels, callbacks):
+        sub.add_command(label=label1, command=cb, )
+    return sub
+
+
 class PictureDescription(Frame):
     def __init__(self, *args, img: PhotoImage, desc_text: str, text_width: int, text_height: int, this_font: font.Font,
                  scrollbar_on: bool = True, **kwargs):
@@ -101,12 +138,15 @@ class LabeledEntry(Frame):
         """Returns checkbox value"""
         return self.entry_var.get()
 
+    def strvar_trace(self, mode: str, cb: Callable) -> None:
+        self.entry_var.trace(mode, cb)
+
 
 class TableCheckbutton(Frame):
     """Widget with a label to the left of a checkbox. Is associated with a power gate and when clicked, toggles the
     output of this gate"""
 
-    def __init__(self, parent: Optional[Widget], gate: InputTk, return_focus_to: Widget, this_font: font.Font,
+    def __init__(self, parent: Optional[Widget], gate: LogicGate, return_focus_to: Widget, this_font: font.Font,
                  popup_font: font.Font, *args, checkbutton_padding: Optional[dict] = None, **kwargs):
         super().__init__(parent, *args, background="white", **kwargs)
         self.gate = gate
@@ -248,7 +288,7 @@ class CheckbuttonTable(LabelFrame):
             return None
         return self.entries[row].get()
 
-    def del_gate_entry(self, gate: InputTk) -> None:
+    def del_gate_entry(self, gate: LogicGate) -> None:
         """Deletes the entry matching gate"""
         for i in range(len(self.entries)):
             if self.entries[i].gate == gate:
@@ -274,7 +314,7 @@ class CheckbuttonTable(LabelFrame):
         self.empty_text_label.grid()
         self.null = True
 
-    def set_font(self, new_font: font.Font):
+    def set_font(self, new_font: font.Font) -> None:
         """Updates the font of the widget and the font of the entries"""
         self.config(font=new_font)
         self.this_font = new_font
@@ -284,7 +324,7 @@ class CheckbuttonTable(LabelFrame):
 
         self.update_idletasks()
 
-    def on_frame_configure(self, event):
+    def on_frame_configure(self, event: Event) -> None:
         """Reset the scroll region to encompass the inner frame"""
         self.canvas.config(width=self.winfo_reqwidth() - 25)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -292,17 +332,26 @@ class CheckbuttonTable(LabelFrame):
 
 class ScrollableFrame(Frame):
 
-    def __init__(self, *args, this_font: font.Font, **kwargs):
+    def __init__(self, *args, this_font: font.Font, horizontal: bool = False, bg_color: Optional[str] = None, **kwargs):
         Frame.__init__(self, *args, **kwargs)
-        self.canvas = Canvas(self, highlightthickness=0, )
-        self.frame = Frame(self.canvas)
-        self.vsb = Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.canvas.configure(yscrollcommand=self.vsb.set)
-
+        self.canvas = Canvas(self, highlightthickness=0, width=self.winfo_reqwidth(), height=self.winfo_reqheight())
+        self.frame = Frame(self.canvas, width=self.winfo_reqwidth(), height=self.winfo_reqheight())
         self.this_font = this_font
+        if not horizontal:
+            self.scrollbar = Scrollbar(self, orient="vertical", command=self.canvas.yview)
+            self.canvas.configure(yscrollcommand=self.scrollbar.set)
+            self.scrollbar.grid(row=0, column=1, sticky='nse', pady=(0, 0))
+            self.canvas.grid(row=0, column=0, sticky='nws', padx=(0, 0))
+        else:
+            self.scrollbar = Scrollbar(self, orient="horizontal", command=self.canvas.xview)
+            self.canvas.configure(xscrollcommand=self.scrollbar.set)
+            self.scrollbar.grid(row=1, column=0, sticky='ews', pady=(0, 0))
+            self.canvas.grid(row=0, column=0, sticky='new', padx=(0, 0))
 
-        self.vsb.grid(row=0, column=1, sticky='nse', pady=(0, 0), rowspan=4)
-        self.canvas.grid(row=0, column=0, sticky='nws', padx=(0, 0))
+        if bg_color is not None:
+            self.config(background=bg_color)
+            self.canvas.config(background=bg_color)
+            self.frame.config(background=bg_color)
 
         self.canvas.create_window((0, 0), window=self.frame, anchor="nw", tags="self.frame")
         self.frame.bind("<Configure>", self.on_frame_configure)
@@ -310,3 +359,52 @@ class ScrollableFrame(Frame):
     def on_frame_configure(self, event):
         """Reset the scroll region to encompass the inner frame"""
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+
+class LabeledButton(Frame):
+
+    def __init__(self, *args, label_direction: Literal['n', 's', 'e', 'w'], button_content: Union[PhotoImage | str],
+                 cmd: Callable, label_text: str, button_sticky: str = "", label_sticky: str = "",
+                 background: Optional[str] = None, this_font: Optional[font.Font] = None,  **kwargs):
+        Frame.__init__(self, *args, **kwargs)
+        self.this_font = this_font
+        self.label = Label(self, font=self.this_font, text=label_text)
+        self.button = Button(self, font=self.this_font, command=cmd)
+
+        if label_direction == tkinter.N:
+            self.label.grid(row=0, column=0, sticky=label_sticky)
+            self.button.grid(row=1, column=0, sticky=button_sticky)
+        elif label_direction == tkinter.S:
+            self.label.grid(row=1, column=0, sticky=label_sticky)
+            self.button.grid(row=0, column=0, sticky=button_sticky)
+        elif label_direction == tkinter.E:
+            self.label.grid(row=0, column=1, sticky=label_sticky)
+            self.button.grid(row=0, column=0, sticky=button_sticky)
+        elif label_direction == tkinter.W:
+            self.label.grid(row=0, column=0, sticky=label_sticky)
+            self.button.grid(row=1, column=1, sticky=button_sticky)
+        else:
+            self.label.grid()
+            self.button.grid()
+
+        if background is not None:
+            self.config(background=background)
+            self.label.config(background=background)
+            self.button.config(background=background)
+
+        if isinstance(button_content, str):
+            self.button.config(text=button_content)
+        elif isinstance(button_content, PhotoImage):
+            self.button.config(image=button_content)
+
+    def set_font(self, new_font: font.Font) -> None:
+        """Updates the font of the widget and the font of the entries"""
+        self.this_font = new_font
+        self.label.config(font=new_font)
+        self.button.config(font=new_font)
+
+    def buttonconfig(self, **kwargs) -> None:
+        self.button.configure(**kwargs)
+
+    def labelconfig(self, **kwargs) -> None:
+        self.label.configure(**kwargs)
