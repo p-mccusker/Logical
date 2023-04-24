@@ -1,5 +1,5 @@
 ########################################################################################################################
-# File: circuit.py
+# File: logical.py
 # Author: Peter McCusker
 # License:
 # Date: 01/04/2023
@@ -11,10 +11,9 @@
 #   - Proper resizing of side pane on font changes
 #   - Method of creating custom circuits to be place and used as other gates
 ########################################################################################################################
-import os
-import platform
+import tkinter
+from enum import *
 from tkinter import filedialog as fd
-
 import tomlkit
 
 from tk_widgets import *
@@ -48,23 +47,9 @@ def do_overlap(l1: (int, int), r1: (int, int), l2: (int, int), r2: (int, int)) -
     return True
 
 
-def resource_path(relative_path: str) -> str:
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    base_path = ""
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS if Windows or _MEIDrqOib if Linux
-        if platform.system() == "Windows":
-            base_path = sys._MEIPASS
-        elif platform.system() == "Linux":
-            base_path = sys._MEIDrqOib
-    except AttributeError:
-        base_path = os.path.abspath(".")
-
-    return os.path.join(base_path, relative_path)
-
-
-def join_folder_file(folder: str, file: str):
-    return resource_path(os.path.join(folder, file))
+class ApplicationModes(Enum):
+    REGULAR = 0
+    CUSTOM_CIRCUIT = 1
 
 
 class Application(Tk):
@@ -73,6 +58,7 @@ class Application(Tk):
     max_selectable_gates = 100
     border_width = 3  # Width of border separating canvas from the right pane
     input_selection_screen_width = 250  # Width of the right pane
+    circuit_screen_height = 130
     # Fonts #####################
     font_family = "Helvetica"
     font_size = 12
@@ -81,6 +67,8 @@ class Application(Tk):
     # Preference Dirs ###########
     user_home_dir = os.path.expanduser('~')
     preference_file_name = "logical.toml"
+    # Application Modes #########
+    mode = ApplicationModes.REGULAR
 
     def __init__(self, width: int = 1280, height: int = 720):
         super().__init__()
@@ -124,6 +112,7 @@ class Application(Tk):
 
         self.active_input = None  # The input object to be placed when the user clicks the mouse
         self.active_input_pi = None  # Photoimage for active gate
+        self.active_input_pi_fn = ""
         self.active_input_img_index = 0  # Canvas image index of active gate
         # Fonts #####################
         self.active_font = font.Font(family=Application.font_family, size=Application.font_size, weight=font.NORMAL,
@@ -144,14 +133,31 @@ class Application(Tk):
         # Input Selection Widgets ###
         self.bordered_frame = None  # Border Frame to separate canvas and the right pane
         self.screen_is = None  # Separate Window to select which gate input to place
-        self.is_buttons = []  # Holds tuple: the buttons for each input gate and its border frame
+        self.is_buttons = {}  # Holds the buttons for each gate
         self.is_edit_table = None  # Table to toggle inputs on/off
         self.is_button_frame = None  # LabelFrame to hold the buttons and their labels
         #############################
+        # Custom Circuit Widgets ####
+        self.screen_circuit = None
+        self.circuit_frame = None
+        self.circuit_pi = None
+        self.circuit_buttons = []
+        self.circuit_button = None
+        self.circuit_border_frame = None
+        self.custom_circuit_button = None
+        self.custom_circuit_pis = []
+        self.new_circuit_pi = None
+        self.new_circuit_button = None
+        self.circuit_input_lbframe = None
+        self.circuit_output_lbframe = None
+        self.active_circuit = None
+        self.circuits = []
+        #############################
+        # Circuit Mode Popup ########
+        self.circuit_context_menu = None
         #############################
         # Timer Window Widgets ######
         self.timer_popup = None  # Toplevel popup window for window
-
         self.selected_timer = None  # The timer that is currently being modified
         self.timer_state_cb = None  # Checkbox to toggle the timer's default state
         self.timer_state_intvar = IntVar(value=TRUE)  # Value of the default state checkbox
@@ -165,6 +171,7 @@ class Application(Tk):
         self.open_filename = ""
         self.preference_path = ""
         self.save_path = ""
+        self.tmp_save_filename = "tmp" + self.filename
         #############################
         # Preference Vars ###########
         self.preference_toplevel = None
@@ -179,49 +186,49 @@ class Application(Tk):
         self.font_families = [*set(list(font.families()))]
         self.font_families.sort()
         #############################
-        # Help Vars ###########
+        # Help Vars #################
         self.help_window = None
         #############################
-
+        self.protocol("WM_DELETE_WINDOW", self.exit)
         self.init_file_paths()
 
     def build_gate_repo(self):
         """Compiles repository for gates, the active ones, their names, and descriptions.  When adding new functions,
         register them here"""
-        self.gates.register_gate(power, name=None,
+        self.gates.register_gate(power, name=power.__name__,
                                  desc="This power source is either powered or not. It takes no inputs.",
                                  callback=self.set_active_fn_power,
-                                 image_file=join_folder_file(IMG_FOLDER, "power.png"))
-        self.gates.register_gate(logic_not, name=None,
+                                 image_file=join_folder_file(GATE_IMG_FOLDER, "power.png"))
+        self.gates.register_gate(logic_not, name=logic_not.__name__,
                                  desc="The NOT gate inverts what it receives as input. It requires one input.",
                                  callback=self.set_active_fn_not,
-                                 image_file=join_folder_file(IMG_FOLDER, "not.png"))
-        self.gates.register_gate(logic_and, name=None,
+                                 image_file=join_folder_file(GATE_IMG_FOLDER, "not.png"))
+        self.gates.register_gate(logic_and, name=logic_and.__name__,
                                  desc="The AND gate outputs power only if all of its inputs are powered as well. "
                                       "It requires at least two inputs.",
                                  callback=self.set_active_fn_and,
-                                 image_file=join_folder_file(IMG_FOLDER, "and.png"))
-        self.gates.register_gate(logic_nand, name=None,
+                                 image_file=join_folder_file(GATE_IMG_FOLDER, "and.png"))
+        self.gates.register_gate(logic_nand, name=logic_nand.__name__,
                                  desc="The NAND gate outputs power if not every input is powered. "
                                       "It requires at least two inputs.",
                                  callback=self.set_active_fn_nand,
-                                 image_file=join_folder_file(IMG_FOLDER, "nand.png"))
-        self.gates.register_gate(logic_or, name=None,
+                                 image_file=join_folder_file(GATE_IMG_FOLDER, "nand.png"))
+        self.gates.register_gate(logic_or, name=logic_or.__name__,
                                  desc="The OR gate outputs power if at least one input is powered. "
                                       "It requires at least two inputs.", callback=self.set_active_fn_or,
-                                 image_file=join_folder_file(IMG_FOLDER, "or.png"))
-        self.gates.register_gate(logic_xor, name=None,
+                                 image_file=join_folder_file(GATE_IMG_FOLDER, "or.png"))
+        self.gates.register_gate(logic_xor, name=logic_xor.__name__,
                                  desc="The XOR gate outputs power if at least one, but not all, inputs are powered. "
                                       "It requires at least two inputs",
                                  callback=self.set_active_fn_xor,
-                                 image_file=join_folder_file(IMG_FOLDER, "xor.png"))
-        self.gates.register_gate(output, name=None, desc="The output gate has the same output as its input. "
+                                 image_file=join_folder_file(GATE_IMG_FOLDER, "xor.png"))
+        self.gates.register_gate(output, name=output.__name__, desc="The output gate has the same output as its input. "
                                                          "This gate requires one input and has no outputs.",
                                  callback=self.set_active_fn_output,
-                                 image_file=join_folder_file(IMG_FOLDER, "output.png"))
-        self.gates.register_gate(logic_clock, name=None, desc="This clock turns on/off at a constant rate. "
+                                 image_file=join_folder_file(GATE_IMG_FOLDER, "output.png"))
+        self.gates.register_gate(logic_clock, name=logic_clock.__name__, desc="This clock turns on/off at a constant rate. "
                                                               "It has no inputs.", callback=self.set_active_fn_clock,
-                                 image_file=join_folder_file(IMG_FOLDER, "clock.png"))
+                                 image_file=join_folder_file(GATE_IMG_FOLDER, "clock.png"))
 
     def update_font(self, family: str, size: int) -> None:
         self.font_family = family
@@ -235,8 +242,13 @@ class Application(Tk):
         self.is_edit_table.set_font(self.active_font)
         self.is_edit_table.set_focus_widget(self.screen_icb)
         self.is_button_frame.config(font=self.active_font)
-        for (btn, label) in self.is_buttons:
+        for func in self.is_buttons.keys():
+            (btn, label) = self.is_buttons[func]
             label.config(font=reconfig_font(self.active_font, offset=-2, weight='bold'))
+
+        self.new_circuit_button.set_font(self.active_font)
+        for labeled_button in self.circuit_buttons:
+            labeled_button.set_font(self.active_font)
 
     def init_file_paths(self) -> None:
         if platform.system() == "Windows":  # If current platform is Windows...
@@ -262,13 +274,24 @@ class Application(Tk):
         os.umask(old_mask)
 
         self.preference_file_name = os.path.join(self.preference_path, self.preference_file_name)
+        self.tmp_save_filename = os.path.join(self.save_path, self.tmp_save_filename)
 
     def reset_gui(self) -> None:
         """Resets the gui on a significant change, such as a font change"""
         self.clear()
         self.gui_build_all()
 
-    def input_gates_intersect(self, event: Event) -> (bool, Optional[InputTk]):
+    def get_gate_list(self) -> list:
+        gate_list = []
+        if self.mode == ApplicationModes.REGULAR:
+            for func in self.gates.keys():
+                for item in self.gates[func].get_active_gates():
+                    gate_list.append(item)
+        elif self.mode == ApplicationModes.CUSTOM_CIRCUIT:
+            gate_list = self.active_circuit.get_gates()
+        return gate_list
+
+    def input_gates_intersect(self, event: Event) -> (bool, Optional[LogicGate | Circuit]):
         """Checks if a new gate would intersect an existing gate if it was placed at (event.x, event.y) on the canvas,
          if they do, return true and the intersecting gate, otherwise return False, None"""
         img1_center_x, img1_center_y = event.x, event.y
@@ -278,24 +301,23 @@ class Application(Tk):
         # Get Bottom-Right Coordinates of gate to be placed
         img1_br_x, img1_br_y = int(img1_center_x + center_x_offset), int(img1_center_y + center_y_offset)
         # Loop through all placed input gates to check if the new gate intersects with any placed gate
-        for func in self.gates.keys():
-            for gate in self.gates[func].get_active_gates():
-                if do_overlap((img1_tl_x, img1_tl_y), (img1_br_x, img1_br_y),
-                              gate.top_left(), gate.bottom_right()):
-                    return True, gate
+
+        for gate in self.get_gate_list():
+            if do_overlap((img1_tl_x, img1_tl_y), (img1_br_x, img1_br_y),
+                          gate.top_left(), gate.bottom_right()):
+                return True, gate
         return False, None
 
-    def intersects_input_gate(self, event: Event) -> (bool, list[InputTk]):
+    def intersects_input_gate(self, event: Event) -> (bool, list[LogicGate | Circuit]):
         """Checks if the coordinate (event.x, event.y) intersects any existing gate(s) on canvas,
         if so, return true and the list of all gates which were intersected (in the case of overlapping gates),
         otherwise return False, []"""
         intersected_gates = []
         intersects = False
-        for func in self.gates.keys():
-            for item in self.gates[func].get_active_gates():
-                if point_in_rect(event.x, event.y, item.top_left(), item.bottom_right()):  # If event is withing gate...
-                    intersects = True
-                    intersected_gates.append(item)
+        for item in self.get_gate_list():
+            if point_in_rect(event.x, event.y, item.top_left(), item.bottom_right()):  # If event is within gate...
+                intersects = True
+                intersected_gates.append(item)
 
         return intersects, intersected_gates
 
@@ -339,7 +361,7 @@ class Application(Tk):
             self.icb_selected_gates.append(first_gate)
             self.icb_click_drag_gate.move(event.x, event.y)
 
-    def right_click_cb(self, event: Event) -> None:
+    def connect_gates(self, event: Event) -> None:
         """Clears a gate button press if present.  If not, select two gates and connect them"""
         if 0 <= event.x <= self.width and 0 <= event.y <= self.height:
             if self.icb_is_gate_active:  # Right-clicking clears the gate that a user selects with a button
@@ -356,9 +378,10 @@ class Application(Tk):
             if len(self.icb_selected_gates) == 0:
                 first_gate.add_rect()
                 self.icb_selected_gates.append(first_gate)
+
             elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] != first_gate:
                 # Gate is already selected and the second gate is different from the first
-                connect_gates(self.icb_selected_gates[0], first_gate)
+                self.icb_selected_gates[0].add_line(first_gate)
                 self.deselect_active_gates()
             elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] == first_gate:
                 # Gate is already selected and the second gate is the same as the first
@@ -368,6 +391,37 @@ class Application(Tk):
                     self.deselect_active_gates()
             else:
                 self.deselect_active_gates()
+
+    def draw_gate_connection(self) -> None:
+        if len(self.icb_selected_gates) == 2:
+            self.icb_selected_gates[0].add_line(self.icb_selected_gates[1])
+            self.deselect_active_gates()
+
+    def do_circuit_context_menu(self, event: Event):
+        try:
+            if self.icb_is_gate_active:  # Right-clicking clears the gate that a user selects with a button
+                self.set_active_fn_none()
+                self.deselect_active_gates()
+                return
+
+            intersects, gates = self.intersects_input_gate(event)
+            if not intersects:
+                return
+
+            first_gate = gates[0]
+
+            if len(self.icb_selected_gates) == 0:
+                first_gate.add_rect()
+                self.icb_selected_gates.append(first_gate)
+
+            elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] != first_gate:
+                # Gate is already selected and the second gate is different from the first
+                first_gate.add_rect()
+                self.icb_selected_gates.append(first_gate)
+
+            self.circuit_context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            pass
 
     def multi_select_cb(self, event: Event) -> None:
         """Selects multiple gates to be deleted"""
@@ -391,16 +445,22 @@ class Application(Tk):
     def motion_cb(self, event: Event) -> None:
         """Move the image of the selected gate with the mouse"""
         if self.icb_is_gate_active and 0 <= event.x <= self.width and 0 <= event.y <= self.height:
-            curr_func = self.active_input.get_func()
-            self.active_input_pi = PhotoImage(file=self.gates[curr_func]["image_file"])
+            self.active_input_pi = PhotoImage(file=self.active_input_pi_fn)
             self.active_input_img_index = self.screen_icb.create_image(event.x, event.y, image=self.active_input_pi)
             self.active_input.set_id(self.active_input_img_index)
 
     def delete_cb(self, event: Event) -> None:
         """Delete all selected gates from the canvas"""
+        gate_container = None
         for i in range(len(self.icb_selected_gates)):
             gate = self.icb_selected_gates[i]
-            self.gates[gate.get_func()].remove(gate)
+
+            if self.mode == ApplicationModes.REGULAR:
+                gate_container = self.gates[gate.get_func()]
+            elif self.mode == ApplicationModes.CUSTOM_CIRCUIT:
+                gate_container = self.active_circuit
+
+            gate_container.remove(gate)
             if is_power_gate(gate):  # Remove entries from the power table
                 self.is_edit_table.del_gate_entry(gate)
             gate.delete()
@@ -410,12 +470,10 @@ class Application(Tk):
     def remove_connection_cb(self, event: Event) -> None:
         """Removed the connection between 2 gates"""
         if not self.icb_is_gate_active:
-            # self.select_gate_under_cursor(event, selectable_gates=2)
             if len(self.icb_selected_gates) == 2 and self.icb_selected_gates[0] != self.icb_selected_gates[1]:
                 g1 = self.icb_selected_gates[0]
                 g2 = self.icb_selected_gates[1]
                 g1.remove_connection(g2, self_is_parent=is_parent(g1, g2))
-                # self.icb_selected_gates[1].remove_connection(self.icb_selected_gates[0])
                 self.deselect_active_gates()
             else:
                 log_msg(WARNING, "You can only disconnect two gates!")
@@ -425,39 +483,63 @@ class Application(Tk):
         if self.icb_is_gate_active and 0 <= event.x <= self.width and 0 <= event.y <= self.height:
             if self.input_gates_intersect(event)[0]:
                 return
+            if self.mode == ApplicationModes.REGULAR:
+                self.place_gate_regular(event)
+            elif self.mode == ApplicationModes.CUSTOM_CIRCUIT:
+                self.place_gate_circuit(event)
 
-            self.active_input_pi = PhotoImage(file=self.gates[self.active_input.get_func()]["image_file"])
-            inst_num = len(self.gates[self.active_input.get_func()].get_active_gates()) + 1
+    def place_gate_regular(self, event: Event) -> None:
+        gate_info = self.gates[self.gates.proper_key(self.active_input)]
+        image_file = gate_info["image_file"]
+        inst_num = len(gate_info.get_active_gates()) + 1
+        new_gate = None
+        if is_clock(self.active_input):
+            new_gate = ClockTk(update_rate=self.default_update_rate, image_file=image_file,
+                               label=self.active_input.get_label() + str(inst_num), canvas=self.screen_icb,
+                               center=(event.x, event.y))
+            self.selected_timer = gate_info.get_active_gates()[-1]
+            self.timer_prompt()  # Configure this new timer on placement
+        elif is_output_gate(self.active_input):
+            # If output gate, make it smaller to fit with border
+            new_gate = OutputGate(image_file=image_file, label=self.active_input.get_label() + str(inst_num),
+                                  canvas=self.screen_icb, center=(event.x, event.y), out=self.active_input.out)
+        elif isinstance(self.active_input, LogicGate):
+            # If output gate, make it smaller to fit with border
+            new_gate = LogicGate(self.active_input.get_func(), image_file=image_file,
+                                 label=self.active_input.get_label() + str(inst_num), canvas=self.screen_icb,
+                                 center=(event.x, event.y), out=self.active_input.out)
+        elif is_circuit(self.active_input):
+            # If output gate, make it smaller to fit with border
+            new_gate = Circuit(ins={}, outs={}, image_file=image_file, label=self.active_input.get_label(),
+                               canvas=self.screen_icb, center=(event.x, event.y))
+            print("is_circuit")
 
-            if is_clock(self.active_input):
-                self.gates[self.active_input.get_func()].add_active_gate(ClockTk(update_rate=self.default_update_rate,
-                                                                                 gate_info_repo=self.gates,
-                                                                                 label=self.active_input.get_label() +
-                                                                                       str(inst_num),
-                                                                                 canvas=self.screen_icb,
-                                                                                 center=(event.x, event.y)))
-                self.selected_timer = self.gates[self.active_input.get_func()].get_active_gates()[-1]
-                self.timer_prompt()  # Configure this new timer on placement
-            elif isinstance(self.active_input, InputTk):
-                self.gates[self.active_input.get_func()].add_active_gate(InputTk(self.active_input.get_func(),
-                                                                                 gate_info_repo=self.gates,
-                                                                                 label=self.active_input.get_label() +
-                                                                                       str(inst_num),
-                                                                                 canvas=self.screen_icb,
-                                                                                 center=(event.x, event.y),
-                                                                                 out=self.active_input.out,
-                                                                                 # If output gate, make it smaller to fit with border
-                                                                                 dims=(self.img_width - 5,
-                                                                                       self.img_height - 5) if
-                                                                                 is_output_gate(self.active_input) else
-                                                                                 (0, 0)))
-            last_input = self.gates[self.active_input.get_func()].get_active_gates()[-1]
-            self.active_input_img_index = last_input.get_id()
-            # Add checkbox entry to entry menu if gate is a power source
-            if is_power_gate(last_input):
-                self.is_edit_table.add_entry(last_input)
+        self.gates.add_gate(new_gate)
+        print(self.gates.gate_infos)
+        last_input = gate_info.get_active_gates()[-1]
+        self.active_input_img_index = last_input.get_id()
+        # Add checkbox entry to entry menu if gate is a power source
+        if is_power_gate(last_input):
+            self.is_edit_table.add_entry(last_input)
+
+    def place_gate_circuit(self, event: Event) -> None:
+        gate_info = self.gates[self.active_input.get_func()]
+        image_file = gate_info["image_file"]
+        inst_num = len(gate_info.get_active_gates()) + 1
+        logic_gate = LogicGate(self.active_input.get_func(), image_file=image_file,
+                               label=self.active_input.get_label(), canvas=self.screen_icb,
+                               center=(event.x, event.y), out=self.active_input.out)
+        self.active_circuit.add_gate(logic_gate)
+        last_input = self.active_circuit.get_gates()[-1]
+        self.active_input_img_index = last_input.get_id()
 
     def save(self, event: Optional[Event] = None) -> None:
+        self.save_diagram()
+            
+        for circuit in self.circuits:
+            self.save_circuit(circuit)
+
+    def save_diagram(self) -> None:
         """Save the current circuit to a file, if this is the first save, prompt for file name"""
         if self.filename == "":  # If the program has not been saved before, prompt for filename
             log_msg(INFO, "No save file has been specified.")
@@ -467,11 +549,7 @@ class Application(Tk):
         with open(self.filename, 'w') as save_file:
             self.deselect_active_gates()
             self.reset()
-            gates = []
-
-            for func in self.gates.keys():  # Create one list out of all gates
-                for gate in self.gates[func].get_active_gates():
-                    gates.append(gate)
+            gates = self.get_gate_list()
 
             for idx, gate in enumerate(gates):
                 # For each gate, write the gate and its enumeration, which is used as its id
@@ -498,25 +576,49 @@ class Application(Tk):
 
                 # For every output, find the gate in the master list and add its id number to the list,
                 # to reconstruct later
-                out_fmt = "[" if len(out_gates) > 0 else "[]"
-                for out_gate in out_gates:
-                    for other_gate in gates:
-                        if other_gate[0] == out_gate:
-                            out_fmt += str(other_gate[1]) + "|"
-                            break
-                out_fmt = out_fmt[:-1] + ']'
+                if out_gates:
+                    out_fmt = "[" if len(out_gates) > 0 else "[]"
+                    for out_gate in out_gates:
+                        for other_gate in gates:
+                            if other_gate[0] == out_gate:
+                                out_fmt += str(other_gate[1]) + "|"
+                                break
+                    out_fmt = out_fmt[:-1] + ']'
+                else:
+                    out_fmt = '[]'
 
                 print('{0},{1},{2}'.format(cnt, in_fmt, out_fmt), file=save_file)
+
+    def save_circuit(self, circuit) -> None:
+        doc = tomlkit.document()
+        settings = tomlkit.table()
+        settings.add("Width", self.width)
+        settings.add("Height", self.height)
+        settings.add("Background", self.background_color.get())
+        settings.add("Font", [self.active_font["family"], self.active_font["size"],
+                              self.active_font["weight"], self.active_font["slant"]])
+        settings.add("Colors", LogicGate.line_colors_on)
+        doc["Settings"] = settings
+        with open(self.preference_file_name, mode="wt", encoding="utf-8") as fp:
+            tomlkit.dump(doc, fp)
+            log_msg(INFO, "Saved settings to: " + self.preference_file_name)
 
     def save_as(self):
         """Create save file prompt and set self.filename to this file"""
         self.filename = fd.asksaveasfilename(initialfile=self.filename, initialdir=self.save_path,
                                              filetypes=[("Circuit Diagram", "*" + self.file_type)])
 
+    def save_temp(self) -> None:
+        tmp = self.filename
+        self.filename = self.tmp_save_filename
+        self.save()
+        self.filename = tmp
+
     def open(self, event: Optional[Event] = None) -> None:
         """"Load circuit from file.  Eventually use tomlkit to create nicelly formatted file."""
-        self.filename = fd.askopenfilename(initialdir=self.save_path,
-                                           filetypes=[("Circuit Diagram", "*" + self.file_type)])
+        if self.filename != self.tmp_save_filename:
+            self.filename = fd.askopenfilename(initialdir=self.save_path,
+                                               filetypes=[("Circuit Diagram", "*" + self.file_type)])
 
         if self.filename == "":
             return
@@ -540,7 +642,7 @@ class Application(Tk):
                 # line_list[2]: Center Y of Gate on canvas
                 # line_list[3]: Gate Output
                 # line_list[-1]: Gate Num
-                gate_func = self.gates[line_list[0]]  # get_logic_func_from_name(line_list[0])
+                gate_func = self.gates.func_from_name(line_list[0])  # get_logic_func_from_name(line_list[0])
                 # Strip parenthesis and space from center str, then split
                 gate_inst = len(self.gates[gate_func].get_active_gates()) + 1
                 position_x = int(line_list[1].strip("("))
@@ -552,14 +654,18 @@ class Application(Tk):
                     # line_list[3]: Default Value
                     # line_list[4]: Update Rate
                     # line_list[5]: gate number
-                    gate = ClockTk(gate_info_repo=self.gates, update_rate=float(line_list[4]),
+                    gate = ClockTk(image_file=self.gates.attr(gate_func, "image_file"), update_rate=float(line_list[4]),
                                    label="Clock #" + str(gate_inst),
                                    canvas=self.screen_icb, center=gate_center, default_state=int(line_list[5]))
-                else:  # Otherwise all the other gates have the same format
-                    gate = InputTk(func=gate_func, gate_info_repo=self.gates,
-                                   label=capitalize(gate_func.__name__ + " #" + str(gate_inst)),
-                                   canvas=self.screen_icb, center=gate_center, out=gate_out,
-                                   dims=(95, 45) if gate_func == output else (0, 0))
+                elif gate_func == output:  # Otherwise all the other gates have the same format
+                    gate = OutputGate(image_file=self.gates.attr(gate_func, "image_file"),
+                                      label=capitalize(gate_func.__name__ + " #" + str(gate_inst)),
+                                      canvas=self.screen_icb, center=gate_center, out=gate_out)
+
+                else:
+                    gate = LogicGate(func=gate_func, image_file=self.gates.attr(gate_func, "image_file"),
+                                     label=capitalize(gate_func.__name__ + " #" + str(gate_inst)),
+                                     canvas=self.screen_icb, center=gate_center, out=gate_out)
                     if is_power_gate(gate):
                         self.is_edit_table.add_entry(gate)
                         gate.set_label("Power #" + str(gate_inst))
@@ -593,14 +699,23 @@ class Application(Tk):
                 for input_id in inputs_id_list:
                     for (gate, num) in gates:
                         if num == input_id:
-                            connect_gates(gate, current_gate)
+                            # connect_gates(gate, current_gate)
+                            gate.add_line(current_gate)
                             break
 
                 for output_id in outputs_id_list:
                     for (gate, num) in gates:
                         if num == output_id:
-                            connect_gates(current_gate, gate)
+                            # connect_gates(current_gate, gate)
+                            current_gate.add_line(gate)
                             break
+
+    def open_temp(self) -> None:
+        tmp = self.filename
+        self.filename = self.tmp_save_filename
+        self.open()
+        self.filename = tmp
+        os.remove(self.tmp_save_filename)
 
     def clear(self) -> None:
         """Clear the canvas, clear all entries from the power table, and delete all gates"""
@@ -812,47 +927,72 @@ class Application(Tk):
 
     def set_active_fn_output(self) -> None:
         self.icb_is_gate_active = True
-        self.active_input = InputTk(output, self.gates, label="Output #", canvas=self.screen_icb, out=TRUE)
+        self.active_input = OutputGate(self.gates.attr(output, "image_file"), label="Output #", canvas=self.screen_icb,
+                                       out=TRUE)
+        self.active_input_pi_fn = self.gates.attr(output, "image_file")
 
     def set_active_fn_power(self) -> None:
         self.icb_is_gate_active = True
-        self.active_input = InputTk(power, self.gates, label="Power #", canvas=self.screen_icb, out=TRUE)
+        self.active_input = LogicGate(power, self.gates.attr(power, "image_file"), label="Power #", canvas=self.screen_icb,
+                                      out=TRUE)
+        self.active_input_pi_fn = self.gates.attr(power, "image_file")
 
     def set_active_fn_and(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = InputTk(logic_and, self.gates, label="And Gate #", canvas=self.screen_icb)
+        self.active_input = LogicGate(logic_and, self.gates.attr(logic_and, "image_file"), label="And Gate #",
+                                      canvas=self.screen_icb)
+        self.active_input_pi_fn = self.gates.attr(logic_and, "image_file")
 
     def set_active_fn_nand(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = InputTk(logic_nand, self.gates, label="Nand Gate #", canvas=self.screen_icb)
+        self.active_input = LogicGate(logic_nand, self.gates.attr(logic_nand, "image_file"), label="Nand Gate #",
+                                      canvas=self.screen_icb)
+        self.active_input_pi_fn = self.gates.attr(logic_nand, "image_file")
 
     def set_active_fn_xor(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = InputTk(logic_xor, self.gates, label="Xor Gate #", canvas=self.screen_icb)
+        self.active_input = LogicGate(logic_xor, self.gates.attr(logic_xor, "image_file"), label="Xor Gate #",
+                                      canvas=self.screen_icb)
+        self.active_input_pi_fn = self.gates.attr(logic_xor, "image_file")
 
     def set_active_fn_not(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = InputTk(logic_not, self.gates, label="Not Gate #", canvas=self.screen_icb)
+        self.active_input = LogicGate(logic_not, self.gates.attr(logic_not, "image_file"), label="Not Gate #",
+                                      canvas=self.screen_icb)
+        self.active_input_pi_fn = self.gates.attr(logic_not, "image_file")
 
     def set_active_fn_or(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = InputTk(logic_or, self.gates, label="Or Gate #", canvas=self.screen_icb)
+        self.active_input = LogicGate(logic_or, self.gates.attr(logic_or, "image_file"), label="Or Gate #", canvas=self.screen_icb)
+        self.active_input_pi_fn = self.gates.attr(logic_or, "image_file")
 
     def set_active_fn_clock(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = ClockTk(self.gates, self.default_update_rate, label="Clock #", canvas=self.screen_icb)
+        self.active_input = ClockTk(self.gates.attr(logic_clock, "image_file"), self.default_update_rate, label="Clock #",
+                                    canvas=self.screen_icb)
+        self.active_input_pi_fn = self.gates.attr(logic_clock, "image_file")
+
+    def set_active_fn_custom_circuit(self, index: int) -> None:
+        if index < len(self.circuits):
+            self.deselect_active_gates()
+            self.icb_is_gate_active = True
+            circuit = self.circuits[index]
+            self.active_input = Circuit(ins=circuit.connections["inputs"], outs=circuit.connections["outputs"],
+                                        label=circuit.get_label(), canvas=self.screen_icb,
+                                        image_file=circuit.get_image_file())
+            self.active_input_pi_fn = circuit.get_image_file()
 
     def gui_build_input_selection_menu(self) -> None:
         """Build the side pane: the power table and gate buttons"""
         self.bordered_frame = Frame(self, background='black', width=self.input_selection_screen_width,
                                     height=self.height)
-        self.bordered_frame.grid(row=0, column=1)
+        self.bordered_frame.grid(row=0, column=1, rowspan=2)
         self.bordered_frame.grid_propagate(False)
 
         self.screen_is = Frame(self.bordered_frame, background='white',
@@ -866,16 +1006,18 @@ class Application(Tk):
         # self.is_button_frame.grid_propagate(False)
 
         for (i, func) in enumerate(self.gates.keys()):
+            if not isinstance(func, Callable):
+                continue
             labeled_button_frame = Frame(self.is_button_frame, background='white')
             labeled_button_frame.grid(column=0, row=i, padx=(0, 5), sticky="e")
             if i == len(self.gates) - 1:
                 labeled_button_frame.grid_configure(pady=(0, 5))
 
-            if self.gates[func]["func"] not in (output, power):
+            if func not in (output, power):
                 # Strip logic_ from each logic gate name
-                label_text = capitalize(self.gates[func]["name"][6:]) + " Gate:"
+                label_text = capitalize(self.gates.attr(func, "name")[6:]) + " Gate:"
             else:
-                label_text = capitalize(self.gates[func]["name"]) + " Gate:"
+                label_text = capitalize(self.gates.attr(func, "name")) + " Gate:"
 
             button_label = Label(labeled_button_frame, text=label_text, background='white',
                                  font=reconfig_font(self.active_font, offset=-2, weight="bold"))
@@ -886,11 +1028,11 @@ class Application(Tk):
             is_border_frame.grid(row=0, column=1, sticky='e')
             is_border_frame.propagate(True)
 
-            is_button = Button(is_border_frame, image=self.gates[func]["image"], bg="white", relief="flat",
-                               command=self.gates[func]["callback"])
+            is_button = Button(is_border_frame, image=self.gates.attr(func, "image"), bg="white", relief="flat",
+                               command=self.gates.attr(func, "callback"))
             is_button.grid(sticky='e')
 
-            self.is_buttons.append((is_button, button_label))
+            self.is_buttons[func] = (is_button, button_label)
 
         self.update_idletasks()
 
@@ -901,14 +1043,16 @@ class Application(Tk):
 
     def gui_build_icb(self) -> None:
         """Builds the canvas for the gates to exist on and create all the key bindings"""
-        self.screen_icb = Canvas(self, width=self.width - self.input_selection_screen_width, height=self.height,
+        self.screen_icb = Canvas(self, width=self.width - self.input_selection_screen_width,
+                                 height=self.height - self.circuit_screen_height,
                                  background=self.background_color.get(), highlightthickness=0)
-        self.screen_icb.grid(row=0, column=0, sticky="NESW")
+        self.screen_icb.grid(row=0, column=0, sticky="new")
         self.screen_icb.grid_propagate(False)
+
         self.screen_icb.bind('<Motion>', self.motion_cb)
         self.screen_icb.bind('<Button-1>', self.left_click_cb)
         self.screen_icb.bind('<B1-Motion>', self.click_and_drag_cb)
-        self.screen_icb.bind('<Button-3>', self.right_click_cb)
+        self.screen_icb.bind('<Button-3>', self.connect_gates)
         self.screen_icb.bind('<KeyRelease-BackSpace>', self.delete_cb)
         self.screen_icb.bind('<Control-Button-1>', self.multi_select_cb)
         self.screen_icb.bind('<Control-s>', self.save)
@@ -920,6 +1064,292 @@ class Application(Tk):
         self.screen_icb.bind('<space>', self.toggle_play_pause)
         # Force the canvas to stay focused, keybindings only take effect when this widget has focus
         self.screen_icb.focus_force()
+
+    def gui_build_context_menu(self):
+        self.circuit_context_menu = Popup(self, tearoff=0, menu_mode=True, font=self.active_font)
+        self.circuit_context_menu.add_command(label="Connect", command=self.draw_gate_connection)
+        self.circuit_context_menu.add_separator()
+        self.circuit_context_menu.add_command(label="Set as Circuit Input", state='disabled')
+        self.circuit_context_in_index = 2
+        self.circuit_context_menu.add_command(label="Set as Circuit Output", state='disabled')
+        self.circuit_context_out_index = 3
+        self.input_label_names = []
+        self.output_label_names = []
+
+    def gui_build_circuit_pane(self) -> None:
+        self.circuit_border_frame = Frame(self, background='black', width=self.width - self.input_selection_screen_width - self.border_width,
+                                          height=self.circuit_screen_height)
+        self.circuit_border_frame.grid(row=1, column=0)
+        self.circuit_border_frame.grid_propagate(False)
+
+        self.screen_circuit = Frame(self.circuit_border_frame, background='white',
+                                    width=self.width - self.input_selection_screen_width,
+                                    height=self.circuit_screen_height - self.border_width)
+        self.screen_circuit.grid(row=0, column=0, padx=(0, 0), pady=(self.border_width, 0), sticky="nsew")
+        self.screen_circuit.grid_propagate(False)
+
+        self.circuit_frame = Frame(self.screen_circuit, background='white',
+                                   width=self.width - self.input_selection_screen_width,
+                                   height=self.circuit_screen_height)
+        self.circuit_frame.grid(row=0, column=0, sticky='news')
+        self.circuit_frame.grid_propagate(False)
+
+        self.new_circuit_pi = PhotoImage(file=join_folder_file(CIRCUIT_IMG_FOLDER, "add_new_circuit.png"))
+        self.new_circuit_button = LabeledButton(self.circuit_frame, label_direction=tkinter.S,
+                                                button_content=self.new_circuit_pi,
+                                                cmd=self.gui_enter_circuit_builder, label_text="Add New Circuit",
+                                                this_font=self.active_font, background='white')
+        self.new_circuit_button.grid(row=0, column=len(self.circuit_buttons), sticky='nw', padx=(5, 0), pady=(10, 0))
+
+        for (i, button) in enumerate(self.circuit_buttons):
+            button.grid_configure(column=i, row=0)
+
+    def set_button_state_for_circuit_builder(self, state: str) -> None:
+        for func in [power, logic_clock, output]:
+            (btn, frame) = self.is_buttons[func]
+            btn.configure(state=state)
+        for cir_btn in self.circuit_buttons:
+            cir_btn.buttonconfig(state=state)
+        self.new_circuit_button.buttonconfig(state=state)
+
+    def gui_enter_circuit_builder(self) -> None:
+        self.save_temp()
+        self.clear()
+
+        self.gui_build_context_menu()
+        self.set_button_state_for_circuit_builder('disabled')
+
+        self.mode = ApplicationModes.CUSTOM_CIRCUIT
+        self.active_circuit = Circuit({}, {}, image_file=join_folder_file(CIRCUIT_IMG_FOLDER, "blank_circuit.png"),
+                                      canvas=self.screen_icb)
+
+        self.screen_icb.bind('<Button-3>', self.do_circuit_context_menu)
+        self.custom_circuit_click()
+
+    def gui_close_circuit_builder(self) -> None:
+        self.clear()
+        self.mode = ApplicationModes.REGULAR
+        self.active_circuit = None
+        self.open_temp()
+        self.set_button_state_for_circuit_builder('active')
+
+        self.screen_icb.bind('<Button-3>', self.connect_gates)
+        self.circuit_context_menu.destroy()
+        self.circuit_context_menu = None
+
+    def add_new_circuit(self) -> None:
+        """Adds new circuit button and records circuit information"""
+        # If either no inputs or no outputs have been specified, then this is not a valid circuit
+        try:
+            if int(self.circuit_inputs_var.get()) == 0 or int(self.circuit_outputs_var.get()) == 0:
+                self.circuit_error_prompt("Invalid Circuit! Must have >= 1 input and >= 1 output", 35, 4)
+                return
+        except ValueError:
+            self.circuit_error_prompt("Input and Outputs must be integers.", 35, 4)
+            return
+
+        if self.circuit_io_is_undefined():
+            self.circuit_error_prompt("At least one Input/Output gate is undefined. "
+                                      "Associate each circuit in/out with a gate in the circuit to save the circuit.",
+                                      45, 2)
+            return
+
+        self.active_circuit.set_label(self.circuit_name_entry.get())
+        self.active_circuit.set_image_file(join_folder_file(CIRCUIT_IMG_FOLDER, self.circuit_image_entry.get()))
+        for (i, entry) in enumerate(self.cir_inp_names):
+            # If input nam entry is black or the same as another entry, just give it a stock name
+            if entry.get() == "" or (i < len(self.cir_inp_names) and entry.get() in self.cir_inp_names[i + 1:]):
+                label = str(i)
+            else:
+                label = entry.get()
+            self.active_circuit.set_input(label)
+
+        for (i, entry) in enumerate(self.cir_out_names):
+            # If input nam entry is black or the same as another entry, just give it a stock name
+            if entry.get() == "" or (i < len(self.cir_out_names) and entry.get() in self.cir_out_names[i + 1:]):
+                label = str(i)
+            else:
+                label = entry.get()
+            self.active_circuit.add_output(label)
+
+        self.circuits.append(self.active_circuit)
+
+        self.circuit_pi = PhotoImage(file=join_folder_file(CIRCUIT_IMG_FOLDER, "blank_circuit.png"))
+        self.custom_circuit_pis.append(self.circuit_pi)
+        self.custom_circuit_button = LabeledButton(self.circuit_frame, label_direction=tkinter.S,
+                                                   button_content=self.circuit_pi,
+                                                   cmd=FunctionCallback(self.set_active_fn_custom_circuit, len(self.circuit_buttons)),
+                                                   label_text=self.active_circuit.get_label(),
+                                                   this_font=self.active_font, background='white')
+
+        self.custom_circuit_button.grid(row=0, column=len(self.circuit_buttons), sticky='nw', padx=(5, 0), pady=(10, 0))
+        self.circuit_buttons.append(self.custom_circuit_button)
+        self.new_circuit_button.grid_configure(column=len(self.circuit_buttons))
+
+        self.gates.register_circuit(self.active_circuit,
+                                    callback=FunctionCallback(self.set_active_fn_custom_circuit, len(self.circuit_buttons)),
+                                    image_file=join_folder_file(CIRCUIT_IMG_FOLDER, "blank_circuit.png"))
+        self.active_circuit = None
+
+    def custom_circuit_click(self) -> None:
+        self.circuit_prompt = Toplevel(self)
+        self.circuit_prompt.resizable(False, False)
+        self.circuit_prompt.title("Preferences")
+        self.circuit_prompt.protocol("WM_DELETE_WINDOW", self.exit_circuit_prompt)
+
+        self.cir_labelframe = LabelFrame(self.circuit_prompt, font=self.active_font, text="Add New Circuit")
+        self.cir_labelframe.grid(sticky='news', pady=(10, 10), padx=(10, 10))
+
+        self.circuit_name_entry = LabeledEntry(self.cir_labelframe, label_text="Circuit Name:", entry_text="Custom Circuit",
+                                               entry_width=25, entry_height=1, widget_font=self.active_font)
+        self.circuit_name_entry.grid(row=0, column=0, sticky='ns', columnspan=2)
+
+        self.circuit_image_entry = LabeledEntry(self.cir_labelframe, label_text="Circuit Image filename:",
+                                                entry_text="blank_circuit.png",
+                                                entry_width=20, entry_height=1, widget_font=self.active_font)
+        self.circuit_image_entry.grid(row=1, column=0, sticky='ns', columnspan=2)
+
+        self.circuit_inputs_var = StringVar(value="0")
+        self.circuit_inputs_var.trace("w", self.make_input_entry_list)
+        self.circuit_inputs_entry = LabeledEntry(self.cir_labelframe, label_text="Num. Inputs:",
+                                                 entry_var=self.circuit_inputs_var,
+                                                 entry_width=2, entry_height=1, widget_font=self.active_font)
+        self.circuit_inputs_entry.grid(row=2, column=0, sticky='ew')
+
+        self.circuit_outputs_var = StringVar(value='0')
+        self.circuit_outputs_var.trace("w", self.make_output_entry_list)
+        self.circuit_outputs_entry = LabeledEntry(self.cir_labelframe, label_text="Num. Outputs:",
+                                                  entry_text="0", entry_var=self.circuit_outputs_var,
+                                                  entry_width=2, entry_height=1, widget_font=self.active_font)
+        self.circuit_outputs_entry.grid(row=2, column=1, sticky='ew')
+
+        button = Button(self.cir_labelframe, text="Done", font=self.active_font, command=self.confirm_circuit_prompt)
+        button.grid(row=4, column=0, columnspan=2)
+
+    def make_input_entry_list(self, *args):
+        if self.circuit_input_lbframe is not None:
+            self.circuit_input_lbframe.destroy()
+
+        self.circuit_input_lbframe = LabelFrame(self.cir_labelframe, font=self.active_font, text="Circuit Inputs")
+        self.circuit_input_lbframe.grid(row=3, column=0, sticky='news')
+        self.cir_inp_names = []
+        try:
+            row = int(self.circuit_inputs_var.get())
+            for i in range(row):
+                entry = LabeledEntry(self.circuit_input_lbframe, label_text="Input " + str(i), entry_text="",
+                                     entry_width=12, entry_height=1, widget_font=self.active_font)
+                entry.grid(row=i, column=0, sticky='news')
+                self.cir_inp_names.append(entry)
+                circuit_confirm_output_names = Button(self.circuit_input_lbframe, text="Confirm",
+                                                      font=self.active_font,
+                                                      command=self.confirm_in_gate_names)
+                circuit_confirm_output_names.grid(sticky='ns', columnspan=2)
+
+        except ValueError:
+            return
+
+    def make_output_entry_list(self, *args):
+        if self.circuit_output_lbframe is not None:
+            self.circuit_output_lbframe.destroy()
+
+        self.circuit_output_lbframe = LabelFrame(self.cir_labelframe, font=self.active_font, text="Circuit Outputs")
+        self.circuit_output_lbframe.grid(row=3, column=1, sticky='news')
+        self.cir_out_names = []
+        try:
+            row = int(self.circuit_outputs_var.get())
+            for i in range(row):
+                entry = LabeledEntry(self.circuit_output_lbframe, label_text="Output " + str(i), entry_text="",
+                                     entry_width=12, entry_height=1, widget_font=self.active_font)
+                entry.grid(row=i, column=1, sticky='news')
+                self.cir_out_names.append(entry)
+            circuit_confirm_output_names = Button(self.circuit_output_lbframe, text="Confirm", font=self.active_font,
+                                                  command=self.confirm_out_gate_names)
+            circuit_confirm_output_names.grid(sticky='ns', columnspan=2)
+
+        except ValueError:
+            return
+
+    def confirm_in_gate_names(self) -> None:
+        self.circuit_context_menu.delete(self.circuit_context_in_index)
+        if self.circuit_context_in_index < self.circuit_context_out_index:
+            self.circuit_context_out_index -= 1
+
+        self.active_circuit.reset_inputs()
+        for label in self.cir_inp_names:
+            self.active_circuit.set_input(label.get())
+
+        self.circuit_context_menu.add_cascade(label='Set as Circuit Input',
+                                              menu=make_sub_menu(self.circuit_context_menu,
+                                                                 [label.get() for label in self.cir_inp_names],
+                                                                 [FunctionCallback(self.associate_label_and_gate, "in", label.get()) for label in self.cir_inp_names],
+                                                                 font=self.active_font))
+        self.circuit_context_in_index = self.circuit_context_menu.index("end")
+
+    def confirm_out_gate_names(self) -> None:
+        self.circuit_context_menu.delete(self.circuit_context_out_index)
+        if self.circuit_context_out_index < self.circuit_context_in_index:
+            self.circuit_context_in_index -= 1
+
+        self.active_circuit.reset_outputs()
+        for label in self.cir_out_names:
+            self.active_circuit.set_output(label.get())
+
+
+        self.circuit_context_menu.add_cascade(label='Set as Circuit Output',
+                                              menu=make_sub_menu(self.circuit_context_menu,
+                                                                 [label.get() for label in self.cir_out_names],
+                                                                 [FunctionCallback(self.associate_label_and_gate, "out", label.get()) for label in self.cir_out_names],
+                                                                 font=self.active_font))
+        self.circuit_context_out_index = self.circuit_context_menu.index("end")
+
+    def associate_label_and_gate(self, mode: Literal["in", "out"], label: str) -> None:
+        if len(self.icb_selected_gates) > 0:
+            if mode == "in":
+                self.active_circuit.set_input(label, self.icb_selected_gates[-1])
+            elif mode == "out":
+                self.active_circuit.set_output(label, self.icb_selected_gates[-1])
+
+    def circuit_io_is_undefined(self) -> bool:
+        for connection in self.active_circuit.connections:
+            for gate_label in self.active_circuit.connections[connection]:
+                if self.active_circuit.connections[connection][gate_label] is None:
+                    return True
+        return False
+
+    def circuit_error_prompt(self, msg: str, chars_wide: int, chars_high: int ) -> None:
+        self.circuit_error = Toplevel(self)
+        # self.circuit_error.resizable(False, False)
+        # Make window modal, meaning actions won't take effect while this window is open
+        self.circuit_error.wait_visibility()
+        self.circuit_error.grab_set()
+        self.circuit_error.transient(self)
+
+        self.circuit_error.title("Error")
+        frame = Frame(self.circuit_error)
+        frame.grid()
+        label = tkinter.Text(frame, font=self.active_font, wrap=tkinter.WORD, width=chars_wide, height=chars_high)
+        label.insert(tkinter.INSERT, msg)
+        label.grid()
+        btn = Button(frame, text="Done", font=self.active_font, command=self.exit_circuit_error)
+        btn.grid()
+
+    def exit_circuit_error(self) -> None:
+        self.circuit_error.grab_release()
+        self.circuit_error.destroy()
+        self.circuit_error.update()
+
+    def exit_circuit_prompt(self) -> None:
+        self.circuit_prompt.grab_release()
+        self.circuit_prompt.destroy()
+        self.circuit_prompt.update()
+        self.gui_close_circuit_builder()
+
+    def confirm_circuit_prompt(self) -> None:
+        self.circuit_prompt.grab_release()
+        self.circuit_prompt.destroy()
+        self.circuit_prompt.update()
+        self.add_new_circuit()
+        self.gui_close_circuit_builder()
 
     def gui_build_top_menu(self) -> None:
         """Build the top menu bar"""
@@ -954,18 +1384,24 @@ class Application(Tk):
         self.gui_build_top_menu()
         self.gui_build_input_selection_menu()
         self.gui_build_icb()
+        self.gui_build_circuit_pane()
 
     def gui_reconfig_dimensions(self):
         """Updates the width and height of the application"""
         self.bordered_frame.config(height=self.height)
         self.screen_is.config(height=self.height)
-        self.screen_icb.config(width=self.width - self.input_selection_screen_width, height=self.height)
+        self.screen_icb.config(width=self.width - self.input_selection_screen_width,
+                               height=self.height - self.circuit_screen_height)
+        self.circuit_border_frame.config(width=self.width - self.input_selection_screen_width,
+                                         height=self.circuit_screen_height)
+        self.screen_circuit.config(width=self.width - self.input_selection_screen_width,
+                                   height=self.circuit_screen_height - self.border_width)
         self.is_edit_table.config_dims(height=self.height - self.is_button_frame.winfo_height() - 30,
                                        width=self.input_selection_screen_width - 30)
         self.geometry(str(self.width) + "x" + str(self.height))
 
     def toggle_line_colors(self) -> None:
-        InputTk.line_colors_on = not InputTk.line_colors_on
+        LogicGate.line_colors_on = not LogicGate.line_colors_on
         for func in self.gates.keys():
             for gate in self.gates[func].get_active_gates():
                 gate.update_line_colors()
@@ -1108,7 +1544,7 @@ class Application(Tk):
         settings.add("Background", self.background_color.get())
         settings.add("Font", [self.active_font["family"], self.active_font["size"],
                               self.active_font["weight"], self.active_font["slant"]])
-        settings.add("Colors", InputTk.line_colors_on)
+        settings.add("Colors", LogicGate.line_colors_on)
         doc["Settings"] = settings
         with open(self.preference_file_name, mode="wt", encoding="utf-8") as fp:
             tomlkit.dump(doc, fp)
@@ -1123,7 +1559,7 @@ class Application(Tk):
             self.width = document["Settings"]["Width"]
             self.height = document["Settings"]["Height"]
             self.background_color.set(document["Settings"]["Background"])
-            InputTk.line_colors_on = document["Settings"]["Colors"]
+            LogicGate.line_colors_on = document["Settings"]["Colors"]
             fonts_attrs = document["Settings"]["Font"]
             self.active_font = font.Font(family=fonts_attrs[0], size=fonts_attrs[1],
                                          weight=fonts_attrs[2], slant=fonts_attrs[3])
@@ -1231,3 +1667,6 @@ class Application(Tk):
 if __name__ == "__main__":
     app = Application()
     app.run()
+    #args = ["hello", {"end": "ttttt"}]
+    #fn = FunctionCallback(print, "hello", end="tttt")
+    #fn()
