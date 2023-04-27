@@ -6,7 +6,6 @@
 # Description: Defines Tk widgets to be used in the circuit application
 ########################################################################################################################
 import tkinter
-import tkinter.font as font
 from tkinter import scrolledtext
 
 from logic_gate import *
@@ -266,7 +265,6 @@ class CheckbuttonTable(LabelFrame):
         tbl_entry = TableCheckbutton(self.frame, gate, self.return_focus_to,
                                      this_font=reconfig_font(self.this_font, offset=-2), popup_font=self.this_font,
                                      checkbutton_padding=self.checkbox_padding)
-        print("Adding entry:", gate.get_label(), 'to row', len(self.entries))
         tbl_entry.grid(row=len(self.entries), sticky='')
         self.entries.append(tbl_entry)
 
@@ -276,7 +274,6 @@ class CheckbuttonTable(LabelFrame):
             return
         row = abs(row)
         entry = self.entries[row]
-        print("Removing entry:", entry, entry.gate.get_label())
         entry.grid_forget()
         entry.destroy()
         self.entries.remove(entry)

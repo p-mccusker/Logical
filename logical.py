@@ -254,6 +254,13 @@ class Application(Tk):
         for labeled_button in self.circuit_buttons:
             labeled_button.set_font(self.active_font)
 
+        for labeled_button in self.circuit_buttons:
+            labeled_button.set_font(self.active_font)
+
+        for circuit in self.circuits:
+            for placed_circuit in self.gates[circuit.get_label()].get_active_gates():
+                placed_circuit.set_font(self.active_font)
+
     def init_file_paths(self) -> None:
         if platform.system() == "Windows":  # If current platform is Windows...
             self.preference_path = os.path.join(self.user_home_dir, "Documents", "logical")
@@ -398,22 +405,24 @@ class Application(Tk):
                     # If both src and dest gates are LogicGates
                     src_gate.add_line(dest_gate)
                     if src_test is not None:
-                        print("Added Connection Between:", src_test, dest_test)
                         src_test.add_connection(dest_test)
                 elif isinstance(src_gate, LogicGate) and isinstance(dest_gate, Circuit):
                     # If src is LogicGate and dest is circuit
                     self.circuit_io_prompt('in', dest_gate)
-                    dest_gate.add_logic_gate_input(src_gate, self.active_circuit_input_gate)
+                    if self.active_circuit_input_gate is not None:
+                        dest_gate.add_logic_gate_input(src_gate, self.active_circuit_input_gate)
                 elif isinstance(src_gate, Circuit) and isinstance(dest_gate, LogicGate):
                     # Src is circuit, dest is LogicGate
                     self.circuit_io_prompt('out', src_gate)
-                    src_gate.add_logic_gate_output(self.active_circuit_output_gate, dest_gate)
+                    if self.active_circuit_output_gate is not None:
+                        src_gate.add_logic_gate_output(self.active_circuit_output_gate, dest_gate)
                 else:
                     # Both src and dest are circuits
                     self.circuit_io_prompt('out', src_gate)
                     self.circuit_io_prompt('in', dest_gate)
-                    src_gate.connect_to_circuit(self.active_circuit_output_gate, dest_gate,
-                                                self.active_circuit_input_gate)
+                    if self.active_circuit_output_gate is not None and self.active_circuit_input_gate is not None:
+                        src_gate.connect_to_circuit(self.active_circuit_output_gate, dest_gate,
+                                                    self.active_circuit_input_gate)
 
                 self.deselect_active_gates()
             elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] == dest_gate:
@@ -1088,6 +1097,7 @@ class Application(Tk):
             self.icb_is_gate_active = True
             circuit = self.circuits[index]
             self.active_input = Circuit.construct_copy(circuit, (NULL, NULL))
+            self.active_input.delete_text()
             self.active_input_pi_fn = circuit.get_image_file()
 
     def gui_build_input_selection_menu(self) -> None:
@@ -1224,17 +1234,15 @@ class Application(Tk):
 
         self.mode = ApplicationModes.CUSTOM_CIRCUIT
         self.active_circuit = Circuit(image_file=join_folder_file(CIRCUIT_IMG_FOLDER, "blank_circuit.png"),
-                                      canvas=self.screen_icb)
+                                      canvas=self.screen_icb, font=self.active_font)
 
         self.screen_icb.bind('<Button-3>', self.do_circuit_context_menu)
-        self.custom_circuit_click()
+        self.custom_circuit_window()
 
     def gui_close_circuit_builder(self) -> None:
-        # print("Original Gates")
-        # for (gate, test) in self.circuit_mode_gates:
-        #    print(test, test.get_label(), test.get_input_gates(), test.get_output_gates())
         self.clear()
         self.mode = ApplicationModes.REGULAR
+        self.active_circuit.delete_text()
         self.active_circuit = None
         self.open_temp()
         self.set_button_state_for_circuit_builder('active')
@@ -1243,9 +1251,10 @@ class Application(Tk):
         self.circuit_context_menu.destroy()
         self.circuit_context_menu = None
 
-    def custom_circuit_click(self) -> None:
+    def custom_circuit_window(self) -> None:
         self.circuit_prompt = Toplevel(self)
         self.circuit_prompt.resizable(False, False)
+        self.circuit_prompt.geometry("+{0}+{1}".format(self.winfo_rootx() + (self.width // 2), self.winfo_rooty() + 10))
         self.circuit_prompt.title("Preferences")
         self.circuit_prompt.protocol("WM_DELETE_WINDOW", self.exit_circuit_prompt)
 
@@ -1311,7 +1320,6 @@ class Application(Tk):
             return
 
         self.active_circuit.set_label(self.circuit_name_entry.get())
-        print("Circuit Name: ", self.circuit_name_entry.get())
         self.active_circuit.set_image_file(join_folder_file(CIRCUIT_IMG_FOLDER, self.circuit_image_entry.get()))
         for (i, entry) in enumerate(self.cir_inp_names):
             # If input nam entry is black or the same as another entry, just give it a stock name
@@ -1430,12 +1438,10 @@ class Application(Tk):
         if len(self.icb_selected_gates) > 0:
             if mode == "in":
                 self.active_circuit.set_circuit_input(label, self.icb_selected_gates[-1][1])
-                print("set", self.icb_selected_gates[-1][1], "as input")
             elif mode == "out":
                 self.active_circuit.set_circuit_output(label, self.icb_selected_gates[-1][1])
-                print("set", self.icb_selected_gates[-1][1], "as output")
         else:
-            print("no selected gates")
+            log_msg(INFO, "No gates selected for i/o")
 
     def circuit_io_is_undefined(self) -> bool:
         for connection in self.active_circuit.connections:
@@ -1779,22 +1785,6 @@ class Application(Tk):
         self.mainloop()
 
 
-class A:
-    def __init__(self, var: IntClass):
-        self.var = var
-
-    def get(self) -> int:
-        return self.var.get()
-
-
 if __name__ == "__main__":
     app = Application()
     app.run()
-    # var = IntClass(25)
-    # a1 = A(var)
-    # a2 = A(var)
-    # print(a1.get())
-    # print(a2.get())
-    # var.set(10)
-    # print(a1.get())
-    # print(a2.get())
