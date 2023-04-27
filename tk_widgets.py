@@ -266,6 +266,7 @@ class CheckbuttonTable(LabelFrame):
         tbl_entry = TableCheckbutton(self.frame, gate, self.return_focus_to,
                                      this_font=reconfig_font(self.this_font, offset=-2), popup_font=self.this_font,
                                      checkbutton_padding=self.checkbox_padding)
+        print("Adding entry:", gate.get_label(), 'to row', len(self.entries))
         tbl_entry.grid(row=len(self.entries), sticky='')
         self.entries.append(tbl_entry)
 
@@ -273,10 +274,15 @@ class CheckbuttonTable(LabelFrame):
         """Removes a gate entry from the table"""
         if abs(row) > len(self.entries):
             return
+        row = abs(row)
         entry = self.entries[row]
+        print("Removing entry:", entry, entry.gate.get_label())
         entry.grid_forget()
         entry.destroy()
         self.entries.remove(entry)
+
+        for (i, entry) in enumerate(self.entries):
+            entry.grid_configure(row=i)
 
         if len(self.entries) == 0:
             self.empty_text_label.grid()
@@ -365,7 +371,7 @@ class LabeledButton(Frame):
 
     def __init__(self, *args, label_direction: Literal['n', 's', 'e', 'w'], button_content: Union[PhotoImage | str],
                  cmd: Callable, label_text: str, button_sticky: str = "", label_sticky: str = "",
-                 background: Optional[str] = None, this_font: Optional[font.Font] = None,  **kwargs):
+                 background: Optional[str] = None, this_font: Optional[font.Font] = None, **kwargs):
         Frame.__init__(self, *args, **kwargs)
         self.this_font = this_font
         self.label = Label(self, font=self.this_font, text=label_text)

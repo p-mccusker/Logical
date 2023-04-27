@@ -8,13 +8,14 @@
 #              TRUE/FALSE/NULL, a picture
 ########################################################################################################################
 from __future__ import annotations
-import sys
+
 import os
-import threading
 import platform
+import sys
+import threading
 from time import *
-from typing import *
 from tkinter import *
+from typing import *
 
 NULL = -1  # Value which represents a gate which has not received a valid input yet
 TRUE = int(True)
@@ -29,9 +30,17 @@ INFO_PRINT_ON = True  # Set false to disable informational prints
 GATE_ID = 0
 
 
+def strip_num_from_label(label: str) -> str:
+    index = label.find('#')
+    if index != -1 and index < len(label) - 1:
+        return label[:index + 1]
+    else:
+        return label
+
+
 def new_gate_label(name: str) -> str:
     global GATE_ID
-    name = name + str(GATE_ID)
+    name = strip_num_from_label(name) + str(GATE_ID)
     GATE_ID += 1
     return name
 
@@ -182,7 +191,8 @@ class IntClass:
 class TestInput:
     """The barest form of the input class, just does the output"""
 
-    def __init__(self, func: Callable, label: str, ins: Optional[list[TestInput]] = None, outs: Optional[list[TestInput]] = None,
+    def __init__(self, func: Callable, label: str, ins: Optional[list[TestInput]] = None,
+                 outs: Optional[list[TestInput]] = None,
                  out: IntClass = IntClass(value=NULL)):
         self.func = func
         self.inputs = ins if ins is not None else []
@@ -193,9 +203,17 @@ class TestInput:
 
     def output(self) -> int:
         if len(self.inputs) == 0:
+            # print("Reached end with:", self.label, self.out.get())
             return self.out.get()
 
         self.out.set(self.func([inp.output() for inp in self.inputs]))
+        # print("set: ", self.label, "output", self.out.get(), ": [", end="")
+        # for inp in self.inputs:
+        #     print(inp.get_label(), end=", ")
+        # print('] [', end="")
+        # for out in self.output_gates:
+        #     print(out.get_label(), end=", ")
+        # print(']')
 
         return self.out.get()
 
@@ -206,16 +224,19 @@ class TestInput:
         return self.label
 
     def add_connection(self, out: TestInput) -> None:
-        out.inputs.append(self)
-        self.output_gates.append(out)
-        print("Added Connection between:", self, out)
+        if self not in out.inputs:
+            out.inputs.append(self)
+        if out not in self.output_gates:
+            self.output_gates.append(out)
 
     def remove_input(self, inp: TestInput) -> None:
         if inp in self.inputs:
+            # print("Removing input", inp.get_label(), "from", self.get_label())
             self.inputs.remove(inp)
 
     def remove_output(self, out: TestInput) -> None:
         if out in self.output_gates:
+            # print("Removing output", out.get_label(), "from", self.get_label())
             self.output_gates.remove(out)
 
     def get_all_input_gates(self, ls: list) -> list:
@@ -236,6 +257,32 @@ class TestInput:
 
     def set_output(self, out: int) -> None:
         self.out.set(out)
+        # self.output()
+
+    def update_line_colors(self) -> None:
+        self.output()
+        for gate in self.output_gates:
+            gate.update_line_colors()
+
+    def remove_connection(self, other: TestInput, self_is_parent: bool) -> None:
+        if self_is_parent:
+            self.remove_output(other)
+            other.remove_input(self)
+        else:
+            self.remove_input(other)
+            other.remove_output(self)
+
+        self.update_line_colors()
+
+    def delete(self) -> None:
+        self.set_output(NULL)
+        for input_gate in self.inputs:
+            input_gate.remove_output(self)
+
+        for output_gate in self.output_gates:
+            output_gate.remove_input(self)
+            output_gate.set_output(NULL)
+            output_gate.update_line_colors()
 
     def __str__(self) -> str:
         return "{0},{1},{2}".format(hex(id(self)), self.func.__name__, self.out.get())
@@ -329,7 +376,7 @@ class Input:
             self.canvas.delete(self.input_id)
             self.img = PhotoImage(file=self.image_file)
             self.input_id = self.canvas.create_image(self.center[0], self.center[1], image=self.img) \
-                                                     if self.center != (NULL, NULL) else NULL
+                if self.center != (NULL, NULL) else NULL
 
     def get_image_file(self) -> str:
         return self.image_file
@@ -359,9 +406,10 @@ class Input:
         self.output_line_ids.append(line_id)
 
     def add_connection(self, dest: Union[Input | TestInput | Circuit]) -> None:
-        self.output_gates.append(dest)
-        dest.inputs.append(self)
-        print("[Input] Added Connection between:", self, dest)
+        if self not in dest.inputs and dest not in self.output_gates:
+            self.output_gates.append(dest)
+            dest.inputs.append(self)
+            # print("[Input] Added Connection between:", self, dest)
 
     def num_outputs(self) -> int:
         return len(self.output_gates)
@@ -438,13 +486,8 @@ class Input:
     def num_inputs(self) -> int:
         return len(self.inputs)
 
-    def delete_img(self) -> None:
-        self.canvas.delete(self.input_id)
-        self.canvas.delete(self.rect_id)
-        self.remove_all_lines()
-        self.input_id = self.rect_id = NULL
-
-    def delete(self) -> None:
+    def delete(self, none: None) -> None:
+        # print("Deleting", self, self.get_label())
         self.canvas.delete(self.input_id)
         self.canvas.delete(self.rect_id)
 
@@ -504,15 +547,32 @@ class LogicGate(Input):
     def output(self) -> int:
         return self.base().output()
 
+    def delete(self, none: None) -> None:
+        # print("Deleting", self, self.get_label())
+        self.canvas.delete(self.input_id)
+        self.canvas.delete(self.rect_id)
+        self.base().delete()
+
+        for input_gate in self.inputs:
+            input_gate.remove_output(self)
+
+        for output_gate in self.output_gates:
+            output_gate.remove_input(self)
+            output_gate.set_output(NULL)
+            output_gate.update_line_colors()
+
+        self.remove_all_lines()
+        self.input_id = self.rect_id = NULL
+
     def add_connection(self, out: Union[LogicGate | Circuit | TestInput]) -> None:
-        if not isinstance(out, TestInput):
+        if not isinstance(out, TestInput) and out not in out.inputs and out not in self.output_gates:
             self.output_gates.append(out)
             out.inputs.append(self)
             if isinstance(out, LogicGate):
                 self.base_gate.add_connection(out.base())
         else:
             self.base_gate.add_connection(out)
-        print("[LogicGate] Added Connection between:", self, self.output_gates, out, out.get_input_gates())
+        # print("[LogicGate] Added Connection between:", self, self.output_gates, out, out.get_input_gates())
 
     def remove_input(self, inp: LogicGate | TestInput):
         if isinstance(inp, LogicGate):
@@ -520,6 +580,11 @@ class LogicGate(Input):
             if contains:
                 self.inputs.remove(inp)
                 self.base_gate.remove_input(inp.base())
+                self.remove_line(self.input_line_ids[gate_index])
+        elif isinstance(inp, Circuit):
+            contains, gate_index = list_contains(self.inputs, inp)
+            if contains:
+                self.inputs.remove(inp)
                 self.remove_line(self.input_line_ids[gate_index])
         else:
             contains, gate_index = list_contains(self.base().get_input_gates(), inp)
@@ -530,7 +595,8 @@ class LogicGate(Input):
         contains, gate_index = list_contains(self.output_gates, destination)
         if contains:
             self.output_gates.remove(destination)
-            self.remove_line(self.output_line_ids[gate_index])
+            if gate_index < len(self.output_line_ids):
+                self.remove_line(self.output_line_ids[gate_index])
 
         if isinstance(destination, LogicGate):
             contains, gate_index = list_contains(self.output_gates, destination)
@@ -556,27 +622,28 @@ class LogicGate(Input):
             return
 
         fill = get_line_fill(output_val)
-        print("OG:", self,  self.output_gates, self.output_line_ids)
-        for i in range(len(self.output_gates)):
+        for i in range(len(self.output_line_ids)):
             self.canvas.itemconfig(self.output_line_ids[i], fill=fill)
-        # for base_out in self.base().get_output_gates():
-        #     base_out.output()
+
+        for base_out in self.base().get_output_gates():
+            base_out.output()
 
         for gate in self.output_gates:
             gate.update_line_colors()
 
     def add_line(self, dest_gate: LogicGate) -> int:
         if is_power_gate(dest_gate) or is_clock(dest_gate) or (is_not_gate(dest_gate) and len(dest_gate.inputs) > 0) \
-           or not (not is_parent(dest_gate, self) and dest_gate not in self.get_output_gates()) or \
+                or not (not is_parent(dest_gate, self) and dest_gate not in self.get_output_gates()) or \
                 (is_output_gate(dest_gate) and len(dest_gate.inputs) > 0):
             print("invalid line between", self, type(self), dest_gate, type(dest_gate))
             return -1
 
         src_pos, dest_pos = (self.bottom_right()[0], self.get_center()[1]), \
-                            (dest_gate.top_left()[0], dest_gate.get_center()[1])
+            (dest_gate.top_left()[0], dest_gate.get_center()[1])
 
         self.add_connection(dest_gate)
-        dest_out = dest_gate.output()
+        # dest_out = dest_gate.output()
+        dest_out = self.output()
 
         line_color = get_line_fill(dest_out)
 
@@ -632,10 +699,6 @@ class LogicGate(Input):
         return "{0},{1},{2}".format(self.func.__name__, self.center, self.out.get())
 
 
-def construct_base_gate_from_logicgate(gate: LogicGate):
-    testinp = TestInput()
-
-
 class OutputGate(LogicGate):
 
     def __init__(self, image_file: str, label: str = "", canvas: Optional[Canvas] = None,
@@ -659,11 +722,17 @@ class OutputGate(LogicGate):
 
     @staticmethod
     def construct_copy(old: OutputGate, pos: (int, int)) -> OutputGate:
-        return OutputGate(image_file=old.get_image_file(), label=new_gate_label(old.get_label()), canvas=old.get_canvas(),
+        return OutputGate(image_file=old.get_image_file(), label=new_gate_label(old.get_label()),
+                          canvas=old.get_canvas(),
                           center=pos)
 
     def add_line(self, dest_gate: LogicGate) -> int:
         pass
+
+    def set_output(self, out: int) -> None:
+        self.out.set(out)
+        self.update_line_colors()
+        print("Set", self.get_label(), "to", self.out.get())
 
     def move(self, x: int, y: int) -> None:
         self.center = (x, y)
@@ -679,29 +748,24 @@ class OutputGate(LogicGate):
         for i in range(len(self.inputs)):
             src_pos = (self.inputs[i].bottom_right()[0], self.inputs[i].get_center()[1])
             self.canvas.coords(self.input_line_ids[i], src_pos[0], src_pos[1],
-                                                       left_center_pos[0], left_center_pos[1])
+                               left_center_pos[0], left_center_pos[1])
 
     def update_line_colors(self) -> None:
         output_val = self.output()
         fill = get_line_fill(output_val)
-        # If line colors are off, still color output gate
-        if not LogicGate.line_colors_on:
-            fill = self.line_fill_true if output_val == TRUE else self.line_fill_false \
-                if output_val == FALSE else self.line_fill_null
-
+        print("Output:", self.label, " setting to ", fill, output_val)
         self.canvas.itemconfig(self.input_id, outline=fill)
 
-        LogicGate.update_line_colors(self)
-
-    def delete(self) -> None:
+    def delete(self, src_gate: Optional[TestInput] = None) -> None:
         self.canvas.delete(self.input_id)
         self.canvas.delete(self.rect_id)
 
         for input_gate in self.inputs:
-            input_gate.remove_output(self)
+            input_gate.remove_output(self, src_gate)
 
         self.remove_all_lines()
         self.input_id = self.rect_id = -1
+        self.set_output(NULL)
 
 
 class ClockTimer:
@@ -755,7 +819,8 @@ class ClockTk(LogicGate):
 
     @staticmethod
     def construct_copy(old: ClockTk, pos: (int, int)) -> ClockTk:
-        return ClockTk(update_rate=old.get_rate(), image_file=old.get_image_file(), label=new_gate_label(old.get_label()),
+        return ClockTk(update_rate=old.get_rate(), image_file=old.get_image_file(),
+                       label=new_gate_label(old.get_label()),
                        canvas=old.get_canvas(), center=pos, default_state=old.default_state)
 
     def output(self) -> int:
@@ -770,9 +835,9 @@ class ClockTk(LogicGate):
         self.set_output(not self.out.get())
         return self.out.get()
 
-    def delete(self) -> None:
+    def delete(self, src_gate: Optional[TestInput] = None) -> None:
         self.stop()
-        LogicGate.delete(self)
+        LogicGate.delete(self, src_gate)
 
     def start(self) -> None:
         if not self.timer.started:
@@ -825,40 +890,32 @@ class Circuit(Input):
 
     @staticmethod
     def construct_copy(old: Circuit, pos: (int, int)) -> Circuit:
-        new_circuit = Circuit(old.get_image_file(), old.get_canvas(), label=new_gate_label(old.get_label()), center=pos)
+        new_circuit = Circuit(old.get_image_file(), old.get_canvas(), label=old.get_label(), center=pos)
 
         # Create Copies of each gate in the circuit
         old_gates = old.get_gates()
         for gate in old_gates:
-            print("Old gate label:", gate.get_label())
-            new_circuit.add_inner_gate(TestInput(gate.get_func(), gate.get_label(),
-                                                 ins=[TestInput(in_gate.get_func(), in_gate.get_label(), None, None) for in_gate in gate.get_input_gates()],
-                                                 outs=[TestInput(out_gate.get_func(), out_gate.get_label(), None, None) for out_gate in gate.get_output_gates()]))
+            new_gate = TestInput(gate.get_func(), new_gate_label(gate.get_label()), None, None, IntClass(value=NULL))
+            new_gate.output()
+            for label in old.connections["inputs"].keys():
+                if gate == old.connections["inputs"][label]:
+                    new_circuit.set_circuit_input(label, new_gate)
+
+            for label in old.connections["outputs"].keys():
+                if gate == old.connections["outputs"][label]:
+                    new_circuit.set_circuit_output(label, new_gate)
+
+            new_circuit.add_inner_gate(new_gate)
 
         new_gates = new_circuit.get_gates()
+        for (i, (old_out_gate1, new_out_gate1)) in enumerate(zip(old_gates, new_gates)):
+            for (j, (old_out_gate2, new_out_gate2)) in enumerate(zip(old_gates, new_gates)):
+                if old_out_gate2 in old_out_gate1.get_input_gates():
+                    new_out_gate2.add_connection(new_out_gate1)
+                elif old_out_gate2 in old_out_gate1.get_output_gates():
+                    new_out_gate1.add_connection(new_out_gate2)
+                    new_out_gate2.output()
 
-        for in_label in old.connections["inputs"].keys():
-            for gate in new_gates:
-                if gate.get_label() == old.connections["inputs"][in_label].get_label():
-                    new_circuit.connections["inputs"][in_label] = gate
-
-        print(new_circuit.connections["outputs"])
-        print(old.connections["outputs"])
-        for out_label in old.connections["outputs"].keys():
-            for gate in new_gates:
-                print("checking", gate.get_label(), "==", old.connections["outputs"][out_label].get_label())
-                if gate.get_label() == old.connections["outputs"][out_label].get_label():
-                    print("Set", new_circuit.connections["outputs"], out_label, 'to', gate)
-                    new_circuit.connections["outputs"][out_label] = gate
-                    # break
-
-        for label in new_circuit.connections["outputs"].keys():
-            gate = new_circuit.connections["outputs"][label]
-            for old_out in old.output_line_info.keys():
-                if gate.get_label() == old_out.get_label():
-                    new_circuit.output_line_info[gate] = []
-
-        print("new:", new_circuit.connections)
         return new_circuit
 
     def add_inner_gate(self, gate: Union[TestInput]) -> None:
@@ -869,47 +926,43 @@ class Circuit(Input):
 
     def add_logic_gate_input(self, src_gate: LogicGate, dest_gate: TestInput) -> None:
         if is_output_gate(src_gate) or (is_not_gate(dest_gate) and len(dest_gate.inputs) > 0) \
-           or not (not is_parent(dest_gate, self) and dest_gate not in self.get_output_gates()):
+                or not (not is_parent(dest_gate, src_gate) and dest_gate not in self.get_output_gates()):
             print("[CIRCUIT]: invalid line between", self, type(self), dest_gate, type(dest_gate))
             return
-        print("src:", src_gate, "dest:", dest_gate)
         src_gate.add_connection(self)
         src_gate.add_connection(dest_gate)
         src_pos, dest_pos = (src_gate.bottom_right()[0], src_gate.get_center()[1]), \
-                            (self.top_left()[0], self.get_center()[1])
+            (self.top_left()[0], self.get_center()[1])
 
         line_color = get_line_fill(src_gate.output())
 
         line_id = self.canvas.create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4, fill=line_color)
         src_gate.add_output_line(line_id)
         self.add_input_line(line_id)
-        print("ALGI Connections:", self.connections)
         self.update_line_colors()
 
     def add_logic_gate_output(self, src_gate: TestInput, dest_gate: LogicGate) -> None:
         if is_power_gate(dest_gate) or is_clock(dest_gate) or (is_not_gate(dest_gate) and len(dest_gate.inputs) > 0) \
-                or not (not is_parent(dest_gate, self) and dest_gate not in self.get_output_gates()) or \
+                or not (not is_parent(dest_gate, src_gate) and dest_gate not in self.get_output_gates()) or \
                 (is_output_gate(dest_gate) and len(dest_gate.inputs) > 0):
             print("[CIRCUIT]: invalid line between", self, type(self), dest_gate, type(dest_gate))
             return
-        print("src:", src_gate, "dest:", dest_gate)
         src_gate.add_connection(dest_gate.base())
         self.add_connection(dest_gate)
+
         src_pos, dest_pos = (self.bottom_right()[0], self.get_center()[1]), \
-                            (dest_gate.top_left()[0], dest_gate.get_center()[1])
+            (dest_gate.top_left()[0], dest_gate.get_center()[1])
 
         line_color = get_line_fill(src_gate.output())
 
         line_id = self.canvas.create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4, fill=line_color)
         dest_gate.add_input_line(line_id)
-        # self.add_output_line(line_id)
         self.output_line_info[src_gate].append((line_id, dest_gate))
-        print("ALGO Connections:", self.connections)
         self.update_line_colors()
 
     def connect_to_circuit(self, src_gate: TestInput, dest_circuit: Circuit, dest_gate: TestInput) -> None:
         if (is_not_gate(dest_gate) and len(dest_gate.inputs) > 0) \
-           or not (not is_parent(dest_gate, self) and dest_gate not in self.get_output_gates()):
+                or not (not is_parent(dest_gate, src_gate) and dest_gate not in self.get_output_gates()):
             print("[CIRCUIT]: invalid line between", self, type(self), dest_gate, type(dest_gate))
             return
 
@@ -917,29 +970,27 @@ class Circuit(Input):
         self.add_connection(dest_circuit)
 
         src_pos, dest_pos = (self.bottom_right()[0], self.get_center()[1]), \
-                            (dest_circuit.top_left()[0], dest_circuit.get_center()[1])
+            (dest_circuit.top_left()[0], dest_circuit.get_center()[1])
 
         line_color = get_line_fill(dest_gate.output())
 
         line_id = self.canvas.create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4, fill=line_color)
         self.output_line_info[src_gate].append((line_id, dest_circuit))
         dest_circuit.add_input_line(line_id)
-        print("CTC Connections:", self.connections)
         self.update_line_colors()
 
-    def remove_inner_gate(self, gate: LogicGate):
-        if gate.get_func() in self.inside_gates.keys():
+    def remove_inner_gate(self, gate: TestInput):
+        if gate.get_func() in self.inside_gates.keys() and gate in self.inside_gates[gate.get_func()]:
             self.inside_gates[gate.get_func()].remove(gate)
 
     def update_line_colors(self) -> None:
-        # print(self.connections)
         for name in self.connections["outputs"].keys():
             gate = self.connections["outputs"][name]
-            fill = get_line_fill(gate.output())
-            for (line_id, gate) in self.output_line_info[gate]:
-                print("update_line_colors: ", type(gate), gate)
-                self.canvas.itemconfig(line_id, fill=fill)
-                gate.update_line_colors()
+            if gate:
+                fill = get_line_fill(gate.output())
+                for (line_id, dest_gate) in self.output_line_info[gate]:
+                    self.canvas.itemconfig(line_id, fill=fill)
+                    dest_gate.update_line_colors()
 
     def move(self, x: int, y: int) -> None:
         self.center = (x, y)
@@ -966,18 +1017,18 @@ class Circuit(Input):
 
     def reset_outputs(self) -> None:
         self.connections["outputs"] = {}
-        print("reset outputs")
 
     def get_output_gates(self) -> list[LogicGate | Circuit]:
         ls = []
         for gate in self.output_line_info:
-            for pair in self.output_line_info[gate]:
-                ls.append(pair)
+            for (line_id, out_gate) in self.output_line_info[gate]:
+                ls.append(out_gate)
         return ls
 
-    def remove_output(self, destination: Circuit | LogicGate,  src: Optional[TestInput] = None) -> None:
+    def remove_output(self, destination: Circuit | LogicGate, src: Optional[TestInput] = None) -> None:
         contains, gate_index = list_contains(self.get_output_gates(), destination)
-        if contains:
+        if contains and src is not None:
+            print("Outputs for ", self, ":", self.output_line_info[src][gate_index])
             (line_id, dest_gate) = self.output_line_info[src][gate_index]
             self.output_line_info[src].remove((line_id, dest_gate))
             self.remove_line(line_id)
@@ -1000,6 +1051,20 @@ class Circuit(Input):
             other_base.remove_output(src)
             src.set_output(NULL)
 
+        self.update_line_colors()
+        other.update_line_colors()
+
+    def remove_line(self, line_id: int) -> None:
+        self.canvas.delete(line_id)
+
+        if list_contains(self.input_line_ids, line_id)[0]:
+            self.input_line_ids.remove(line_id)
+        for gate in self.output_line_info.keys():
+            print("remove_line():", gate.get_label(), self.output_line_info.keys(), self.output_line_info[gate])
+            for (out_line_id, out_gate) in self.output_line_info[gate]:
+                if line_id == out_line_id:
+                    self.output_line_info[gate].remove((out_line_id, out_gate))
+
     def remove_all_lines(self, gate: Optional[TestInput] = None) -> None:
         for line_id in self.input_line_ids:
             self.remove_line(line_id)
@@ -1014,13 +1079,33 @@ class Circuit(Input):
                     self.remove_line(line_id)
                 self.output_line_info[gate] = []
 
-    def set_input(self,  name: str, gate: Optional[TestInput] = None) -> None:
+    def set_circuit_input(self, name: str, gate: Optional[TestInput] = None) -> None:
         self.connections["inputs"][name] = gate
 
     def get_input(self, name: str) -> TestInput:
         return self.connections["inputs"][name]
 
-    def set_output(self,  name: str, gate: Optional[TestInput] = None) -> None:
+    def remove(self, gate: TestInput) -> None:
+        for label in self.get_io_gates("in"):
+            if self.connections["inputs"][label] == gate:
+                self.connections["inputs"][label] = None
+
+        for label in self.get_io_gates("out"):
+            if self.connections["outputs"][label] == gate:
+                self.connections["outputs"][label] = None
+
+        if gate in self.output_line_info.keys():
+            for (line_id, dest_gate) in self.output_line_info[gate]:
+                self.remove_connection(gate, dest_gate, self_is_parent=is_parent(self, dest_gate))
+                self.remove_line(line_id)
+            del self.output_line_info[gate]
+
+        self.remove_inner_gate(gate)
+        gate.delete()
+
+        self.update_line_colors()
+
+    def set_circuit_output(self, name: str, gate: Optional[TestInput] = None) -> None:
         self.connections["outputs"][name] = gate
         if gate is not None:
             self.output_line_info[gate] = []
@@ -1038,16 +1123,28 @@ class Circuit(Input):
                     ls.append(gate)
             return ls
 
-    def delete(self) -> None:
+    def set_output(self, value: int, gate: Optional[TestInput] = None):
+        print("Circuit set_input()")
+        if gate and gate in self.get_gates(gate.get_func()):
+            gate.set_output(value)
+
+    def delete(self, src_gate: Optional[TestInput] = None) -> None:
         self.canvas.delete(self.input_id)
         self.canvas.delete(self.rect_id)
 
         for input_gate in self.inputs:
             input_gate.remove_output(self)
 
-        for (line_id, output_gate) in self.get_output_gates():
-            output_gate.remove_input(self)
-            output_gate.set_output(NULL)
+        for gate in self.output_line_info.keys():
+            for (line_id, out_gate) in self.output_line_info[gate]:
+                out_gate.remove_input(self)
+                out_gate.set_output(NULL)
+                print("Set", out_gate.get_label(), " to NULL", out_gate.get_input_gates(), self)
+
+        #for output_gate in self.get_output_gates():
+        #    output_gate.remove_input(self)
+        #    output_gate.set_output(NULL)
+        #    print("Set", output_gate.get_label(), " to NULL")
 
         self.remove_all_lines()
 
@@ -1060,31 +1157,31 @@ class Circuit(Input):
             return self.connections['outputs']
 
 
-def is_output_gate(gate: LogicGate) -> bool:
+def is_output_gate(gate: LogicGate | TestInput) -> bool:
     return isinstance(gate, OutputGate)
 
 
-def is_power_gate(gate: LogicGate) -> bool:
+def is_power_gate(gate: LogicGate | TestInput) -> bool:
     return isinstance(gate, LogicGate) and gate.get_func() == power
 
 
-def is_and_gate(gate: LogicGate) -> bool:
+def is_and_gate(gate: LogicGate | TestInput) -> bool:
     return isinstance(gate, LogicGate) and gate.get_func() == logic_and
 
 
-def is_nand_gate(gate: LogicGate) -> bool:
+def is_nand_gate(gate: LogicGate | TestInput) -> bool:
     return isinstance(gate, LogicGate) and gate.get_func() == logic_nand
 
 
-def is_or_gate(gate: LogicGate) -> bool:
+def is_or_gate(gate: LogicGate | TestInput) -> bool:
     return isinstance(gate, LogicGate) and gate.get_func() == logic_or
 
 
-def is_xor_gat(gate: LogicGate) -> bool:
+def is_xor_gat(gate: LogicGate | TestInput) -> bool:
     return isinstance(gate, LogicGate) and gate.get_func() == logic_xor
 
 
-def is_not_gate(gate: LogicGate) -> bool:
+def is_not_gate(gate: LogicGate | TestInput) -> bool:
     return isinstance(gate, LogicGate) and gate.get_func() == logic_not
 
 
@@ -1105,7 +1202,7 @@ def connection_exists(gate1: LogicGate, gate2: LogicGate) -> bool:
     return list_contains(gate1.get_input_gates(), gate2)[0] or list_contains(gate1.get_output_gates(), gate2)[0]
 
 
-def is_parent(parent: Input, child: Input) -> bool:
+def is_parent(parent: LogicGate | TestInput, child: LogicGate | TestInput) -> bool:
     return list_contains(child.get_all_input_gates([]), parent)[0]
 
 
