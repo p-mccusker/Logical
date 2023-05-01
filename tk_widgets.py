@@ -272,6 +272,7 @@ class CheckbuttonTable(LabelFrame):
         """Removes a gate entry from the table"""
         if abs(row) > len(self.entries):
             return
+        row = abs(row)
         entry = self.entries[row]
         entry.grid_forget()
         entry.destroy()
@@ -334,16 +335,21 @@ class CheckbuttonTable(LabelFrame):
 
 class ScrollableFrame(Frame):
 
-    def __init__(self, *args, this_font: font.Font, bg_color: Optional[str] = None, **kwargs):
+    def __init__(self, *args, this_font: font.Font, horizontal: bool = False, bg_color: Optional[str] = None, **kwargs):
         Frame.__init__(self, *args, **kwargs)
-        self.canvas = Canvas(self, highlightthickness=0, width=740, height=560)
-                             # scrollregion=(0, 0, self.winfo_reqwidth(), self.winfo_reqheight()))
-        self.frame = Frame(self.canvas)
+        self.canvas = Canvas(self, highlightthickness=0, width=self.winfo_reqwidth(), height=self.winfo_reqheight())
+        self.frame = Frame(self.canvas, width=self.winfo_reqwidth(), height=self.winfo_reqheight())
         self.this_font = this_font
-        self.scrollbar = Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-        self.scrollbar.grid(row=0, column=1, sticky='nse', pady=(0, 0))
-        self.canvas.grid(row=0, column=0, sticky='nws', padx=(0, 0))
+        if not horizontal:
+            self.scrollbar = Scrollbar(self, orient="vertical", command=self.canvas.yview)
+            self.canvas.configure(yscrollcommand=self.scrollbar.set)
+            self.scrollbar.grid(row=0, column=1, sticky='nse', pady=(0, 0))
+            self.canvas.grid(row=0, column=0, sticky='nws', padx=(0, 0))
+        else:
+            self.scrollbar = Scrollbar(self, orient="horizontal", command=self.canvas.xview)
+            self.canvas.configure(xscrollcommand=self.scrollbar.set)
+            self.scrollbar.grid(row=1, column=0, sticky='ews', pady=(0, 0))
+            self.canvas.grid(row=0, column=0, sticky='new', padx=(0, 0))
 
         if bg_color is not None:
             self.config(background=bg_color)
@@ -357,11 +363,12 @@ class ScrollableFrame(Frame):
         """Reset the scroll region to encompass the inner frame"""
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
+
 class LabeledButton(Frame):
 
     def __init__(self, *args, label_direction: Literal['n', 's', 'e', 'w'], button_content: Union[PhotoImage | str],
                  cmd: Callable, label_text: str, button_sticky: str = "", label_sticky: str = "",
-                 background: Optional[str] = None, this_font: Optional[font.Font] = None,  **kwargs):
+                 background: Optional[str] = None, this_font: Optional[font.Font] = None, **kwargs):
         Frame.__init__(self, *args, **kwargs)
         self.this_font = this_font
         self.label = Label(self, font=self.this_font, text=label_text)
