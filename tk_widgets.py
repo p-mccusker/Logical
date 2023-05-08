@@ -7,8 +7,9 @@
 ########################################################################################################################
 import tkinter
 from tkinter import scrolledtext
+from tkinter.font import Font
 
-from logic_gate import *
+from graphical_gate import *
 
 
 def get_widget_bottom_y(widget: Widget) -> int:
@@ -21,10 +22,10 @@ def get_widget_bottom_x(widget: Widget) -> int:
     return widget.winfo_rootx() + widget.winfo_reqwidth()
 
 
-def reconfig_font(this_font: font.Font, offset: int, weight: Optional[str] = None,
-                  slant: Optional[str] = None) -> font.Font:
+def reconfig_font(this_font: Font, offset: int, weight: Optional[str] = None,
+                  slant: Optional[str] = None) -> Font:
     """Creates a new font based off this_font with options modified"""
-    return font.Font(family=this_font["family"],
+    return Font(family=this_font["family"],
                      size=this_font["size"] + offset,
                      weight=this_font["weight"] if weight is None else weight,
                      slant=this_font["slant"] if slant is None else slant)
@@ -68,7 +69,7 @@ def make_sub_menu(parent: Menu, labels: list[str], callbacks: list[Callable] = N
 
 
 class PictureDescription(Frame):
-    def __init__(self, *args, img: PhotoImage, desc_text: str, text_width: int, text_height: int, this_font: font.Font,
+    def __init__(self, *args, img: PhotoImage, desc_text: str, text_width: int, text_height: int, this_font: Font,
                  scrollbar_on: bool = True, **kwargs):
         Frame.__init__(self, *args, **kwargs)
         self.img = img
@@ -86,7 +87,7 @@ class PictureDescription(Frame):
         self.description.insert(tkinter.INSERT, desc_text)
         self.description.configure(state='disabled')
 
-    def set_font(self, new_font: font.Font) -> None:
+    def set_font(self, new_font: Font) -> None:
         self.this_font = new_font
         self.description.config(font=self.this_font)
 
@@ -96,7 +97,7 @@ class LabeledEntry(Frame):
 
     def __init__(self, *arg, label_text: str = "", entry_text: str = "", entry_var: Optional[StringVar] = None,
                  entry_width: Optional[int] = None, entry_height: int = 1,
-                 widget_font: Optional[str | font.Font] = None,
+                 widget_font: Optional[str | Font] = None,
                  label_background: Optional[str] = None, label_foreground: Optional[str] = None,
                  disabled: bool = False, **kwargs):
         Frame.__init__(self, *arg, **kwargs)
@@ -129,7 +130,7 @@ class LabeledEntry(Frame):
     def set_entry_padding(self, **kwargs) -> None:
         self.entry.grid(**kwargs)
 
-    def set_font(self, new_font: font.Font) -> None:
+    def set_font(self, new_font: Font) -> None:
         self.entry.config(font=new_font)
         self.label.config(font=new_font)
 
@@ -145,8 +146,8 @@ class TableCheckbutton(Frame):
     """Widget with a label to the left of a checkbox. Is associated with a power gate and when clicked, toggles the
     output of this gate"""
 
-    def __init__(self, parent: Optional[Widget], gate: LogicGate, return_focus_to: Widget, this_font: font.Font,
-                 popup_font: font.Font, *args, checkbutton_padding: Optional[dict] = None, **kwargs):
+    def __init__(self, parent: Optional[Widget], gate: LogicGate, return_focus_to: Widget, this_font: Font,
+                 popup_font: Font, *args, checkbutton_padding: Optional[dict] = None, **kwargs):
         super().__init__(parent, *args, background="white", **kwargs)
         self.gate = gate
         self.return_focus_to = return_focus_to
@@ -219,7 +220,7 @@ class TableCheckbutton(Frame):
     def get(self) -> int:
         return self.check_var.get()
 
-    def set_font(self, new_font: font.Font) -> None:
+    def set_font(self, new_font: Font) -> None:
         self.checkbutton.config(font=new_font)
 
     def set_focus_widget(self, widget: Widget):
@@ -230,7 +231,7 @@ class CheckbuttonTable(LabelFrame):
     """Scrollable LabelFrame which stores entries corresponding to each power gate. Each entry has a checkbox that,
     when clicked, toggles the output of the gate. Can also be right-clicked to change the name of the gate."""
 
-    def __init__(self, parent, return_focus_to: Widget, this_font: font.Font, *args, **kwargs):
+    def __init__(self, parent, return_focus_to: Widget, this_font: Font, *args, **kwargs):
         LabelFrame.__init__(self, master=parent, background='white', font=this_font, *args, **kwargs)
         self.canvas = Canvas(self, highlightthickness=0, background='white')
         self.frame = Frame(self.canvas, background='white')
@@ -317,7 +318,7 @@ class CheckbuttonTable(LabelFrame):
         self.empty_text_label.grid()
         self.null = True
 
-    def set_font(self, new_font: font.Font) -> None:
+    def set_font(self, new_font: Font) -> None:
         """Updates the font of the widget and the font of the entries"""
         self.config(font=new_font)
         self.this_font = new_font
@@ -335,7 +336,7 @@ class CheckbuttonTable(LabelFrame):
 
 class ScrollableFrame(Frame):
 
-    def __init__(self, *args, this_font: font.Font, horizontal: bool = False, bg_color: Optional[str] = None, **kwargs):
+    def __init__(self, *args, this_font: Font, horizontal: bool = False, bg_color: Optional[str] = None, **kwargs):
         Frame.__init__(self, *args, **kwargs)
         self.canvas = Canvas(self, highlightthickness=0, width=self.winfo_reqwidth(), height=self.winfo_reqheight())
         self.frame = Frame(self.canvas, width=self.winfo_reqwidth(), height=self.winfo_reqheight())
@@ -368,7 +369,7 @@ class LabeledButton(Frame):
 
     def __init__(self, *args, label_direction: Literal['n', 's', 'e', 'w'], button_content: Union[PhotoImage | str],
                  cmd: Callable, label_text: str, button_sticky: str = "", label_sticky: str = "",
-                 background: Optional[str] = None, this_font: Optional[font.Font] = None, **kwargs):
+                 background: Optional[str] = None, this_font: Optional[Font] = None, **kwargs):
         Frame.__init__(self, *args, **kwargs)
         self.this_font = this_font
         self.label = Label(self, font=self.this_font, text=label_text)
@@ -400,7 +401,7 @@ class LabeledButton(Frame):
         elif isinstance(button_content, PhotoImage):
             self.button.config(image=button_content)
 
-    def set_font(self, new_font: font.Font) -> None:
+    def set_font(self, new_font: Font) -> None:
         """Updates the font of the widget and the font of the entries"""
         self.this_font = new_font
         self.label.config(font=new_font)

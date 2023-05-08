@@ -11,9 +11,9 @@
 #   - Proper resizing of side pane on font changes
 #   - Method of creating custom circuits to be place and used as other gates
 ########################################################################################################################
+import tkinter
 from enum import *
 from tkinter import filedialog as fd
-
 import tomlkit
 
 from tk_widgets import *
@@ -115,10 +115,10 @@ class Application(Tk):
         self.active_input_pi_fn = ""
         self.active_input_img_index = 0  # Canvas image index of active gate
         # Fonts #####################
-        self.active_font = font.Font(family=Application.font_family, size=Application.font_size, weight=font.NORMAL,
-                                     slant=font.ROMAN)
-        self.font_top = font.Font(family=Application.font_family, size=Application.font_size - 1, weight=font.NORMAL,
-                                  slant=font.ROMAN)
+        self.active_font = Font(family=Application.font_family, size=Application.font_size, weight=NORMAL,
+                                     slant=tkinter.font.ROMAN)
+        self.font_top = Font(family=Application.font_family, size=Application.font_size - 1, weight=NORMAL,
+                                  slant=tkinter.font.ROMAN)
         #############################
         # ICB Widgets ###############
         self.screen_icb = None  # Canvas gates are placed on
@@ -186,7 +186,7 @@ class Application(Tk):
         self.line_colors_checkbox = None
         self.font_family_listbox = None
         self.font_size_listbox = None
-        self.font_families = [*set(list(font.families()))]
+        self.font_families = [*set(list(tkinter.font.families()))]
         self.font_families.sort()
         #############################
         # Help Vars #################
@@ -237,10 +237,10 @@ class Application(Tk):
     def update_font(self, family: str, size: int) -> None:
         self.font_family = family
         self.font_size = size
-        self.active_font = font.Font(family=self.font_family, size=self.font_size, weight=font.NORMAL,
-                                     slant=font.ROMAN)
-        self.font_top = font.Font(family=self.font_family, size=self.font_size - 1, weight=font.NORMAL,
-                                  slant=font.ROMAN)
+        self.active_font = Font(family=self.font_family, size=self.font_size, weight=NORMAL,
+                                     slant=tkinter.font.ROMAN)
+        self.font_top = Font(family=self.font_family, size=self.font_size - 1, weight=NORMAL,
+                                  slant=tkinter.font.ROMAN)
 
         self.gui_build_top_menu()
         self.is_edit_table.set_font(self.active_font)
@@ -403,26 +403,25 @@ class Application(Tk):
                 # Gate is already selected and the second gate is different from the first
                 if isinstance(src_gate, LogicGate) and isinstance(dest_gate, LogicGate):
                     # If both src and dest gates are LogicGates
-                    src_gate.add_line(dest_gate)
-                    if src_test is not None:
-                        src_test.add_connection(dest_test)
+                    connect_lgate_to_lgate(src_gate, dest_gate)
+                    if src_test is not None and dest_test is not None:
+                        connect_ti_to_ti(src_test, dest_test)
                 elif isinstance(src_gate, LogicGate) and isinstance(dest_gate, Circuit):
                     # If src is LogicGate and dest is circuit
                     self.circuit_io_prompt('in', dest_gate)
                     if self.active_circuit_input_gate is not None:
-                        dest_gate.add_logic_gate_input(src_gate, self.active_circuit_input_gate)
+                        connect_lgate_to_circuit(src_gate, dest_gate, self.active_circuit_input_gate)
                 elif isinstance(src_gate, Circuit) and isinstance(dest_gate, LogicGate):
                     # Src is circuit, dest is LogicGate
                     self.circuit_io_prompt('out', src_gate)
                     if self.active_circuit_output_gate is not None:
-                        src_gate.add_logic_gate_output(self.active_circuit_output_gate, dest_gate)
+                        connect_circuit_to_lgate(src_gate, self.active_circuit_output_gate, dest_gate)
                 else:
                     # Both src and dest are circuits
                     self.circuit_io_prompt('out', src_gate)
                     self.circuit_io_prompt('in', dest_gate)
                     if self.active_circuit_output_gate is not None and self.active_circuit_input_gate is not None:
-                        src_gate.connect_to_circuit(self.active_circuit_output_gate, dest_gate,
-                                                    self.active_circuit_input_gate)
+                        connect_circuit_to_circuit(src_gate, self.active_circuit_output_gate, dest_gate, self.active_circuit_input_gate)
 
                 self.deselect_active_gates()
             elif len(self.icb_selected_gates) == 1 and self.icb_selected_gates[0] == dest_gate:
@@ -486,16 +485,16 @@ class Application(Tk):
         self.circuit_io_window.destroy()
         self.circuit_io_window.update()
 
-    def draw_gate_connection(self) -> None:
-        if len(self.icb_selected_gates) == 2:
-            src = self.icb_selected_gates[0] if not isinstance(self.icb_selected_gates[0], tuple) else \
-            self.icb_selected_gates[0][0]
-            src_test = None if not isinstance(self.icb_selected_gates[0], tuple) else self.icb_selected_gates[0][1]
-            dest = self.icb_selected_gates[1] if not isinstance(self.icb_selected_gates[1], tuple) else \
-            self.icb_selected_gates[1][0]
+    def draw_gate_connection(self) -> None :
+        if len(self.icb_selected_gates) == 2 and self.icb_selected_gates[0] != self.icb_selected_gates[1]:
+            src = self.icb_selected_gates[0] if not isinstance(self.icb_selected_gates[0], tuple) else self.icb_selected_gates[0][0]
+            dest = self.icb_selected_gates[1] if not isinstance(self.icb_selected_gates[1], tuple) else self.icb_selected_gates[1][0]
+            src_test  = None if not isinstance(self.icb_selected_gates[0], tuple) else self.icb_selected_gates[0][1]
             dest_test = None if not isinstance(self.icb_selected_gates[1], tuple) else self.icb_selected_gates[1][1]
-            src.add_line(dest)
-            src_test.add_connection(dest_test)
+            connect_lgate_to_lgate(src, dest)
+            if src_test and dest_test:
+                connect_ti_to_ti(src_test, dest_test)
+
             self.deselect_active_gates()
 
     def do_circuit_context_menu(self, event: Event) -> None:
@@ -566,7 +565,7 @@ class Application(Tk):
             if is_power_gate(gate):  # Remove entries from the power table
                 self.is_edit_table.del_gate_entry(gate)
 
-            gate.delete(self.active_circuit_output_gate)
+            gate.delete()
 
         self.deselect_active_gates()
 
@@ -581,18 +580,52 @@ class Application(Tk):
                 g1_test = None if not isinstance(self.icb_selected_gates[0], tuple) else self.icb_selected_gates[0][1]
                 g2_test = None if not isinstance(self.icb_selected_gates[1], tuple) else self.icb_selected_gates[1][1]
 
-                if (isinstance(g1, LogicGate) and isinstance(g2, LogicGate)) or (isinstance(g1, LogicGate) and isinstance(g2, Circuit)):
-                    g1.remove_connection(g2, self_is_parent=is_parent(g1, g2))
+                if isinstance(g1, LogicGate) and isinstance(g2, LogicGate):
+                    disconnect_lgate_to_lgate(g1, g2)
                 elif isinstance(g1, Circuit) and isinstance(g2, LogicGate):
-                    g1.remove_connection(self.active_circuit_output_gate, g2, self_is_parent=is_parent(g1, g2))
+                    if is_parent(g1, g2):
+                        self.circuit_io_prompt('out', g1)
+                        if self.active_circuit_output_gate is None:
+                            return
+                        disconnect_circuit_to_lgate(g1, self.active_circuit_output_gate, g2)
+                    elif is_parent(g2, g1):
+                        self.circuit_io_prompt('in', g1)
+                        if self.active_circuit_input_gate is None:
+                            return
+                        disconnect_circuit_to_lgate(g1, self.active_circuit_input_gate, g2)
+                    else:
+                        return
+
+                elif isinstance(g1, LogicGate) and isinstance(g2, Circuit):
+                    if is_parent(g1, g2):
+                        self.circuit_io_prompt('in', g2)
+                        if self.active_circuit_input_gate is None:
+                            return
+                        disconnect_circuit_to_lgate(g2, self.active_circuit_input_gate, g1)
+                    elif is_parent(g2, g1):
+                        self.circuit_io_prompt('out', g2)
+                        if self.active_circuit_output_gate is None:
+                            return
+                        disconnect_circuit_to_lgate(g2, self.active_circuit_output_gate, g1)
+                    else:
+                        return
+
                 elif isinstance(g1, Circuit) and isinstance(g2, Circuit):
-                    self.circuit_io_prompt('out', g1)
-                    self.circuit_io_prompt('in', g2)
-                    g1.remove_connection(self.active_circuit_output_gate, g2, self_is_parent=is_parent(g1, g2),
-                                         other_base=self.active_circuit_input_gate)
+                    if is_parent(g1, g2):
+                        self.circuit_io_prompt('out', g1)
+                        self.circuit_io_prompt('in', g2)
+                        if self.active_circuit_output_gate and self.active_circuit_input_gate:
+                            disconnect_circuit_to_circuit(g1, self.active_circuit_output_gate,
+                                                          g2, self.active_circuit_input_gate)
+                    elif is_parent(g2, g1):
+                        self.circuit_io_prompt('out', g2)
+                        self.circuit_io_prompt('in', g1)
+                        if self.active_circuit_output_gate and self.active_circuit_input_gate:
+                            disconnect_circuit_to_circuit(g2, self.active_circuit_output_gate,
+                                                          g1, self.active_circuit_input_gate)
 
                 if g1_test and g2_test:
-                    g1_test.remove_connection(g2_test, self_is_parent=is_parent(g1_test, g2_test))
+                    disconnect_ti_to_ti(g1_test, g2_test)
 
                 self.deselect_active_gates()
             else:
@@ -806,14 +839,14 @@ class Application(Tk):
                     for (gate, num) in gates:
                         if num == input_id:
                             # connect_gates(gate, current_gate)
-                            gate.add_line(current_gate)
+                            connect_lgate_to_lgate(gate, current_gate)
                             break
 
                 for output_id in outputs_id_list:
                     for (gate, num) in gates:
                         if num == output_id:
                             # connect_gates(current_gate, gate)
-                            current_gate.add_line(gate)
+                            connect_lgate_to_lgate(current_gate, gate)
                             break
 
     def open_temp(self) -> None:
@@ -832,11 +865,11 @@ class Application(Tk):
         # Destroy Gates
         for func in self.gates.keys():
             for gate in self.gates[func].get_active_gates():
-                gate.delete(None)
+                gate.delete()
             self.gates[func].active_gates = []
 
         for gate in self.circuit_mode_gates:
-            gate[0].delete(None)
+            gate[0].delete()
 
         self.circuit_mode_gates.clear()
         # Reset all reference to gates
@@ -1682,7 +1715,7 @@ class Application(Tk):
             self.background_color.set(document["Settings"]["Background"])
             LogicGate.line_colors_on = document["Settings"]["Colors"]
             fonts_attrs = document["Settings"]["Font"]
-            self.active_font = font.Font(family=fonts_attrs[0], size=fonts_attrs[1],
+            self.active_font = Font(family=fonts_attrs[0], size=fonts_attrs[1],
                                          weight=fonts_attrs[2], slant=fonts_attrs[3])
 
             self.gui_reconfig_dimensions()
