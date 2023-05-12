@@ -61,7 +61,8 @@ def resource_path(relative_path: str) -> str:
     """ Get absolute path to resource, works for dev and for PyInstaller """
     base_path = ""
     try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS if Windows or _MEIDrqOib if Linux
+        # PyInstaller creates a temp folder and stores path in _MEIPASS if Windows or _MEIDrqOib if Linux,
+        # Mac is currently unknown
         if platform.system() == "Windows":
             base_path = sys._MEIPASS
         elif platform.system() == "Linux":
@@ -73,10 +74,12 @@ def resource_path(relative_path: str) -> str:
 
 
 def join_folder_file(folder: str, file: str):
+    """Gets actual file path"""
     return resource_path(os.path.join(folder, file))
 
 
 def list_contains(ls: list[Any], val: Any) -> (bool, int):
+    """Returns (bool: if val is in ls, int: gate index if exists)"""
     for i in range(len(ls)):
         if ls[i] == val:
             return True, i
@@ -84,10 +87,12 @@ def list_contains(ls: list[Any], val: Any) -> (bool, int):
 
 
 def output(value: list[int]) -> int:
+    """Function for output gates, doesn't do anything"""
     return value[0]
 
 
 def power(value: list[int]) -> int:
+    """Function for power gates, doesn't do anything"""
     return value[0]
 
 
@@ -137,7 +142,8 @@ CIRCUIT_IMG_FOLDER = "images/custom_circuits"
 
 
 class FunctionCallback:
-
+    """Stores a function, its positional arguments, and it's named arguments.
+       Useful for when you need a callback function that takes arguments"""
     def __init__(self, fn: Callable, *args, **kwargs):  #: Optional[list] = None):
         self.fn = fn
         self.args = [*args]
@@ -148,6 +154,7 @@ class FunctionCallback:
 
 
 class IntClass:
+    """Store an int that multiple objects might reference, changing this will affect all referencing objects."""
     def __init__(self, value: int = 0, trace: Optional[FunctionCallback] = None):
         self.value = value
         self.cb = trace
@@ -164,11 +171,11 @@ class IntClass:
         self.cb = callback
 
 
-class TestInput:
-    """The barest form of the input class, just does the output"""
-
-    def __init__(self, func: Callable, label: str, ins: Optional[list[TestInput]] = None,
-                 outs: Optional[list[TestInput]] = None,
+class BaseGate:
+    """The virtual form of the logic gate, just does the gate value calculations.
+       Stores the input gates to calculate its value.  Stores the output gates to update their values."""
+    def __init__(self, func: Callable, label: str, ins: Optional[list[BaseGate]] = None,
+                 outs: Optional[list[BaseGate]] = None,
                  out: IntClass = IntClass(value=NULL)):
         self.func = func
         self.inputs = ins if ins is not None else []
@@ -178,7 +185,7 @@ class TestInput:
         self.label = label
 
     def output(self) -> int:
-        # print("output for ", self.label, self.inputs, self.output_gates)
+        """Returns output of the gate by recursively calculating the outputs of the gate's inputs"""
         if len(self.inputs) == 0:
             return self.out.get()
 
@@ -187,20 +194,24 @@ class TestInput:
         return self.out.get()
 
     def set_label(self, label: str) -> None:
+        """Set gate name"""
         self.label = label
 
     def get_label(self) -> str:
         return self.label
 
-    def remove_input(self, inp: TestInput) -> None:
+    def remove_input(self, inp: BaseGate) -> None:
+        """Remove gate from inputs"""
         if inp in self.inputs:
             self.inputs.remove(inp)
 
-    def remove_output(self, out: TestInput) -> None:
+    def remove_output(self, out: BaseGate) -> None:
+        """remove gate from outputs"""
         if out in self.output_gates:
             self.output_gates.remove(out)
 
-    def get_all_input_gates(self, ls: list) -> list:
+    def get_all_input_gates(self, ls: list) -> list[BaseGate]:
+        """Returns list of all parent gates"""
         for gate in self.inputs:
             ls.append(gate)
             gate.get_all_input_gates(ls)
@@ -210,20 +221,22 @@ class TestInput:
     def get_func(self) -> Callable:
         return self.func
 
-    def get_input_gates(self) -> list[TestInput]:
+    def get_input_gates(self) -> list[BaseGate]:
         return self.inputs
 
-    def get_output_gates(self) -> list[TestInput]:
+    def get_output_gates(self) -> list[BaseGate]:
         return self.output_gates
 
     def set_output(self, out: int) -> None:
+        """Sets value of the gate"""
         self.out.set(out)
-        # self.output()
 
-    def update_line_colors(self) -> None:
+    def update_output_values(self) -> None:
+        """Updates the values of all child gates.
+        Called when the value of a gate is changed and needs to be propogated forward"""
         self.output()
         for gate in self.output_gates:
-            gate.update_line_colors()
+            gate.update_output_values()
 
     def delete(self) -> None:
         self.set_output(NULL)
@@ -233,7 +246,7 @@ class TestInput:
         for output_gate in self.output_gates:
             output_gate.remove_input(self)
             output_gate.set_output(NULL)
-            output_gate.update_line_colors()
+            output_gate.update_output_values()
 
     def __str__(self) -> str:
         return "{0},{1},{2}".format(hex(id(self)), self.func.__name__, self.out.get())
@@ -246,10 +259,10 @@ def test_half_adder():
               [1, 1]]
 
     for input_list in inputs:
-        in1 = TestInput(power, label=new_gate_label(power.__name__), ins=None, out=IntClass(input_list[0]))
-        in2 = TestInput(power, label=new_gate_label(power.__name__), ins=None, out=IntClass(input_list[1]))
-        xor = TestInput(logic_xor, label=new_gate_label(logic_xor.__name__), ins=[in1, in2])
-        and_gate = TestInput(logic_and, label=new_gate_label(logic_and.__name__), ins=[in1, in2])
+        in1 = BaseGate(power, label=new_gate_label(power.__name__), ins=None, out=IntClass(input_list[0]))
+        in2 = BaseGate(power, label=new_gate_label(power.__name__), ins=None, out=IntClass(input_list[1]))
+        xor = BaseGate(logic_xor, label=new_gate_label(logic_xor.__name__), ins=[in1, in2])
+        and_gate = BaseGate(logic_and, label=new_gate_label(logic_and.__name__), ins=[in1, in2])
 
         sum1 = xor.output()
         carry = and_gate.output()
@@ -268,17 +281,17 @@ def test_full_adder():
               [1, 1, 1]]
 
     for input_list in inputs:
-        in1 = TestInput(power, label=new_gate_label(power.__name__), ins=None, out=IntClass(input_list[0]))
-        in2 = TestInput(power, label=new_gate_label(power.__name__), ins=None, out=IntClass(input_list[1]))
-        carry = TestInput(power, label=new_gate_label(power.__name__), ins=None, out=IntClass(input_list[2]))
+        in1 = BaseGate(power, label=new_gate_label(power.__name__), ins=None, out=IntClass(input_list[0]))
+        in2 = BaseGate(power, label=new_gate_label(power.__name__), ins=None, out=IntClass(input_list[1]))
+        carry = BaseGate(power, label=new_gate_label(power.__name__), ins=None, out=IntClass(input_list[2]))
 
-        xor1 = TestInput(logic_xor, label=new_gate_label(logic_xor.__name__), ins=[in1, in2])
-        and1 = TestInput(logic_and, label=new_gate_label(logic_and.__name__), ins=[in1, in2])
+        xor1 = BaseGate(logic_xor, label=new_gate_label(logic_xor.__name__), ins=[in1, in2])
+        and1 = BaseGate(logic_and, label=new_gate_label(logic_and.__name__), ins=[in1, in2])
 
-        xor2 = TestInput(logic_xor, label=new_gate_label(logic_xor.__name__), ins=[xor1, carry])
-        and2 = TestInput(logic_and, label=new_gate_label(logic_and.__name__), ins=[xor1, carry])
+        xor2 = BaseGate(logic_xor, label=new_gate_label(logic_xor.__name__), ins=[xor1, carry])
+        and2 = BaseGate(logic_and, label=new_gate_label(logic_and.__name__), ins=[xor1, carry])
 
-        or1 = TestInput(logic_or, label=new_gate_label(logic_or.__name__), ins=[and1, and2])
+        or1 = BaseGate(logic_or, label=new_gate_label(logic_or.__name__), ins=[and1, and2])
 
         sum1 = xor2.output()
         carry = or1.output()

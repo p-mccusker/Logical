@@ -196,7 +196,7 @@ class Application(Tk):
         self.init_file_paths()
 
     def build_gate_repo(self):
-        """Compiles repository for gates, the active ones, their names, and descriptions.  When adding new functions,
+        """Compiles repository for gates, the active ones, their names, and descriptions.  If adding new logic gates,
         register them here"""
         self.gates.register_gate(power, name=power.__name__,
                                  desc="This power source is either powered or not. It takes no inputs.",
@@ -235,6 +235,7 @@ class Application(Tk):
                                  image_file=join_folder_file(GATE_IMG_FOLDER, "clock.png"))
 
     def update_font(self, family: str, size: int) -> None:
+        """Updates font across all widgets"""
         self.font_family = family
         self.font_size = size
         self.active_font = Font(family=self.font_family, size=self.font_size, weight=NORMAL,
@@ -262,8 +263,9 @@ class Application(Tk):
                 placed_circuit.set_font(self.active_font)
 
     def init_file_paths(self) -> None:
+        """Creates filesystem directory for Logical"""
         if platform.system() == "Windows":  # If current platform is Windows...
-            self.preference_path = os.path.join(self.user_home_dir, "Documents", "logical")
+            self.preference_path = os.path.join(self.user_home_dir, "logical")
             self.save_path = os.path.join(self.preference_path, "circuits")
         elif platform.system() == "Linux":  # Else assume this is linux
             self.preference_path = os.path.join(self.user_home_dir, ".config", "logical")
@@ -293,16 +295,16 @@ class Application(Tk):
         self.gui_build_all()
 
     def get_gate_list(self) -> list:
+        """Return all active """
         if self.mode == ApplicationModes.REGULAR:
             gate_list = []
             for func in self.gates.keys():
-                for item in self.gates[func].get_active_gates():
-                    gate_list.append(item)
+                gate_list += self.gates[func].get_active_gates()
             return gate_list
         elif self.mode == ApplicationModes.CUSTOM_CIRCUIT:
             return self.circuit_mode_gates
 
-    def input_gates_intersect(self, event: Event) -> (bool, Optional[LogicGate | ClockTk | OutputGate | Circuit]):
+    def input_gates_intersect(self, event: Event) -> (bool, Optional[GraphicalGate]):
         """Checks if a new gate would intersect an existing gate if it was placed at (event.x, event.y) on the canvas,
          if they do, return true and the intersecting gate, otherwise return False, None"""
         img1_center_x, img1_center_y = event.x, event.y
@@ -320,7 +322,7 @@ class Application(Tk):
                 return True, gate
         return False, None
 
-    def intersects_input_gate(self, event: Event) -> (bool, list[LogicGate | ClockTk | OutputGate | Circuit]):
+    def intersects_input_gate(self, event: Event) -> (bool, list[GraphicalGate]):
         """Checks if the coordinate (event.x, event.y) intersects any existing gate(s) on canvas,
         if so, return true and the list of all gates which were intersected (in the case of overlapping gates),
         otherwise return False, []"""
@@ -558,12 +560,13 @@ class Application(Tk):
 
             if self.mode == ApplicationModes.REGULAR:
                 self.gates[self.gates.proper_key(gate)].remove(gate)
+
+                if is_power_gate(gate):  # Remove entries from the power table
+                    self.is_edit_table.del_gate_entry(gate)
+
             elif self.mode == ApplicationModes.CUSTOM_CIRCUIT:
                 self.circuit_mode_gates.remove(self.icb_selected_gates[i])
                 self.active_circuit.remove(self.icb_selected_gates[i][1])
-
-            if is_power_gate(gate):  # Remove entries from the power table
-                self.is_edit_table.del_gate_entry(gate)
 
             gate.delete()
 
@@ -623,6 +626,8 @@ class Application(Tk):
                         if self.active_circuit_output_gate and self.active_circuit_input_gate:
                             disconnect_circuit_to_circuit(g2, self.active_circuit_output_gate,
                                                           g1, self.active_circuit_input_gate)
+                    #else:
+                    #    print("Not connected:", g1, g2)
 
                 if g1_test and g2_test:
                     disconnect_ti_to_ti(g1_test, g2_test)
@@ -667,7 +672,7 @@ class Application(Tk):
 
     def place_gate_circuit(self, event: Event) -> None:
         gate = LogicGate.construct_copy(self.active_input, (event.x, event.y))
-        test_gate = TestInput(gate.get_func(), new_gate_label(gate.get_label()))
+        test_gate = BaseGate(gate.get_func(), new_gate_label(gate.get_label()))
         self.active_circuit.add_inner_gate(test_gate)
         self.circuit_mode_gates.append((gate, test_gate))
         self.active_input_img_index = gate.get_id()
@@ -1337,7 +1342,7 @@ class Application(Tk):
 
     def add_new_circuit(self) -> None:
         """Adds new circuit button and records circuit information"""
-        # If either no inputs or no outputs have been specified, then this is not a valid circuit
+        # If no inputs or no outputs have been specified, then this is not a valid circuit
         try:
             if int(self.circuit_inputs_var.get()) == 0 or int(self.circuit_outputs_var.get()) == 0:
                 self.circuit_error_prompt("Invalid Circuit! Must have >= 1 input and >= 1 output", 35, 4)
@@ -1425,11 +1430,11 @@ class Application(Tk):
             circuit_confirm_output_names = Button(self.circuit_output_lbframe, text="Confirm", font=self.active_font,
                                                   command=self.confirm_out_gate_names)
             circuit_confirm_output_names.grid(sticky='ns', columnspan=2)
-
         except ValueError:
             return
 
     def confirm_in_gate_names(self) -> None:
+        """Adds the Circuit input cascade to the context window while in the circuit builder mode"""
         self.circuit_context_menu.delete(self.circuit_context_in_index)
         if self.circuit_context_in_index < self.circuit_context_out_index:
             self.circuit_context_out_index -= 1
@@ -1437,7 +1442,6 @@ class Application(Tk):
         self.active_circuit.reset_inputs()
         for label in self.cir_inp_names:
             self.active_circuit.set_circuit_input(label.get())
-            # self.active_circuit["inputs"][label.get()] = None
 
         self.circuit_context_menu.add_cascade(label='Set as Circuit Input',
                                               menu=make_sub_menu(self.circuit_context_menu,
@@ -1449,13 +1453,13 @@ class Application(Tk):
         self.circuit_context_in_index = self.circuit_context_menu.index("end")
 
     def confirm_out_gate_names(self) -> None:
+        """Adds the Circuit output cascade to the context window while in the circuit builder mode"""
         self.circuit_context_menu.delete(self.circuit_context_out_index)
         if self.circuit_context_out_index < self.circuit_context_in_index:
             self.circuit_context_in_index -= 1
 
         self.active_circuit.reset_outputs()
         for label in self.cir_out_names:
-            # self.active_circuit["outputs"][label.get()] = None
             self.active_circuit.set_circuit_output(label.get())
 
         self.circuit_context_menu.add_cascade(label='Set as Circuit Output',
@@ -1468,6 +1472,7 @@ class Application(Tk):
         self.circuit_context_out_index = self.circuit_context_menu.index("end")
 
     def associate_label_and_gate(self, mode: Literal["in", "out"], label: str) -> None:
+        """Sets the BaseGate to the appropriate label"""
         if len(self.icb_selected_gates) > 0:
             if mode == "in":
                 self.active_circuit.set_circuit_input(label, self.icb_selected_gates[-1][1])
@@ -1477,6 +1482,7 @@ class Application(Tk):
             log_msg(INFO, "No gates selected for i/o")
 
     def circuit_io_is_undefined(self) -> bool:
+        """Returns if any circiut input or output slot is undefined"""
         for connection in self.active_circuit.connections:
             for gate_label in self.active_circuit.connections[connection]:
                 if self.active_circuit.connections[connection][gate_label] is None:
@@ -1561,11 +1567,7 @@ class Application(Tk):
                 gate.update_line_colors()
 
     def preference_prompt(self):
-        """ Resolution: 2 Entries
-            Bg color: Entry/Scroll menu
-            Font Family: Entry
-            Font size: Entry
-            Toggle Line Colors: Checkbox"""
+        """Builds Preference Window"""
         self.preference_toplevel = Toplevel(self)
         self.preference_toplevel.resizable(False, False)
         self.preference_toplevel.title("Preferences")
@@ -1606,7 +1608,8 @@ class Application(Tk):
 
         self.line_colors_checkbox = Checkbutton(line_colors_frame,
                                                 command=self.toggle_line_colors, font=self.active_font)
-        self.line_colors_checkbox.select()
+        if LogicGate.line_colors_on:
+            self.line_colors_checkbox.select()
         self.line_colors_checkbox.pack(side=LEFT)
         # Font Preferences #############################################################################################
         font_frame = Frame(self.preference_toplevel)
