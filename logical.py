@@ -688,6 +688,8 @@ class Application(Tk):
         if self.filename == "":  # If the program has not been saved before, prompt for filename
             log_msg(INFO, "No save file has been specified.")
             self.save_as()
+            if self.filename == None:
+                return
 
         log_msg(INFO, "Saving diagram to: " + self.filename)
         with open(self.filename, 'w') as save_file:
@@ -751,6 +753,12 @@ class Application(Tk):
         """Create save file prompt and set self.filename to this file"""
         self.filename = fd.asksaveasfilename(initialfile=self.filename, initialdir=self.save_path,
                                              filetypes=[("Circuit Diagram", "*" + self.file_type)])
+        if len(self.filename) == 0:
+            self.filename = None
+        elif len(self.filename) < 4 or  (len(self.filename) > 4  and self.filename[len(self.filename)-5:] == self.file_type):
+            self.filename += self.file_type
+        else:
+            print("Neither")
 
     def save_temp(self) -> None:
         tmp = self.filename
@@ -1812,7 +1820,6 @@ class Application(Tk):
         self.reset(None)
         self.quit()
         self.destroy()
-        self.update()
         sys.exit(0)
 
     def run(self) -> None:

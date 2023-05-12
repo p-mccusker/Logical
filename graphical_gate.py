@@ -630,7 +630,7 @@ def disconnect_bg_to_bg(gate1: BaseGate, gate2: BaseGate) -> None:
     src.remove_output(dest)
     dest.remove_input(src)
     dest.set_output(NULL)
-    dest.update_line_colors()
+    dest.update_output_values()
 
 
 def disconnect_lgate_to_lgate(gate1: LogicGate, gate2: LogicGate) -> None:
