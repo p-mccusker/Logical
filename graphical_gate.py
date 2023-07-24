@@ -147,7 +147,7 @@ class GraphicalGate:
         return self.output_gates
 
     def add_rect(self) -> int:
-        """Adds border rectangle around the gate"""
+        """Adds border rectangle around the gate, returns the rectangle id"""
         if self.rect_id < 0:
             self.rect_id = self.canvas.create_rectangle(self.top_left()[0] - self.border_offset,
                                                         self.top_left()[1] - self.border_offset,
@@ -532,17 +532,17 @@ def connect_lgate_to_lgate(src: LogicGate, dest: LogicGate) -> None:
     if dest not in src.get_output_gates():
         src.output_gates.append(dest)
 
-        src_pos, dest_pos = (src.bottom_right()[0], src.get_center()[1]), \
-                            (dest.top_left()[0], dest.get_center()[1])
+    src_pos, dest_pos = (src.bottom_right()[0], src.get_center()[1]), \
+                        (dest.top_left()[0], dest.get_center()[1])
 
-        src_out = src.output()
+    src_out = src.output()
 
-        line_color = get_line_fill(src_out)
+    line_color = get_line_fill(src_out)
 
-        line_id = src.get_canvas().create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4, fill=line_color)
-        LineRepository.store(src, dest, line_id)
+    line_id = src.get_canvas().create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4, fill=line_color)
+    LineRepository.store(src, dest, line_id)
 
-        src.update_line_colors()
+    src.update_line_colors()
 
 
 def connect_lgate_to_circuit(src: LogicGate, circuit: Circuit, dest: BaseGate) -> None:
@@ -554,7 +554,7 @@ def connect_lgate_to_circuit(src: LogicGate, circuit: Circuit, dest: BaseGate) -
     if      is_output_gate(src) or \
             (is_not_gate(dest) and len(dest.inputs) > 0) or \
             not (not is_parent(dest, src.base()) and circuit not in src.get_output_gates()):
-        #print("[connect_lg_to_circuit]: invalid line between", src, type(src), dest, type(dest))
+        print("[connect_lg_to_circuit]: invalid line between", src, type(src), dest, type(dest))
         return
 
     connect_bg_to_bg(src.base(), dest)
@@ -563,24 +563,24 @@ def connect_lgate_to_circuit(src: LogicGate, circuit: Circuit, dest: BaseGate) -
     if circuit not in src.get_output_gates():
         src.output_gates.append(circuit)
 
-        src_pos, dest_pos = (src.bottom_right()[0], src.get_center()[1]), \
-                            (circuit.top_left()[0], circuit.get_center()[1])
+    src_pos, dest_pos = (src.bottom_right()[0], src.get_center()[1]), \
+                        (circuit.top_left()[0], circuit.get_center()[1])
 
-        line_id = src.get_canvas().create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4,
-                                               fill=get_line_fill(src.output()))
-        LineRepository.store(src, circuit, line_id)
-        src.update_line_colors()
+    line_id = src.get_canvas().create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4,
+                                           fill=get_line_fill(src.output()))
+    LineRepository.store(src, circuit, line_id)
+    src.update_line_colors()
 
 
 def connect_circuit_to_lgate(circuit: Circuit, src: BaseGate, dest: LogicGate) -> None:
     """Connects a source circuit to a destination logic"""
+    # or circuit in dest.get_input_gates()\
     if          is_power_gate(dest) or is_clock(dest) \
             or (is_not_gate(dest) and len(dest.inputs) > 0) \
             or (is_parent(dest.base(), src) or dest.base() in src.get_output_gates()) \
-            or (is_output_gate(dest) and len(dest.inputs) > 0)\
-            or circuit in dest.get_input_gates()\
+            or (is_output_gate(dest) and len(dest.inputs) > 0) \
             or dest.base() in src.get_output_gates():
-        #print("[connect_circuit_to_lgate]: invalid line between", src, type(src), dest, type(dest))
+        print("[connect_circuit_to_lgate]: invalid line between", src, type(src), dest, type(dest))
         return
 
     connect_bg_to_bg(src, dest.base())
@@ -600,11 +600,11 @@ def connect_circuit_to_lgate(circuit: Circuit, src: BaseGate, dest: LogicGate) -
 
 def connect_circuit_to_circuit(src_circuit: Circuit, src: BaseGate, dest_circuit: Circuit, dest: BaseGate) -> None:
     """Connect src circuit to dest circuit"""
+    # or src_circuit in dest_circuit.get_input_gates() \
     if         (is_not_gate(dest) and len(dest.inputs) > 0) \
             or (is_parent(dest, src) or dest in src.get_output_gates()) \
-            or src_circuit in dest_circuit.get_input_gates() \
             or dest in src.get_output_gates():
-        #print("[connect_circuit_to_circuit]: invalid line between", src, type(src), dest, type(dest))
+        print("[connect_circuit_to_circuit]: invalid line between", src, type(src), dest, type(dest))
         return
 
     connect_bg_to_bg(src, dest)
@@ -677,7 +677,7 @@ def disconnect_circuit_to_circuit(circuit1: Circuit, cir_ti1: BaseGate, circuit2
 
 class Circuit(GraphicalGate):
     def __init__(self, image_file: str, canvas: Canvas, font: Font, label: str = "",
-                 center: (int, int) = (NULL, NULL), ):
+                 center: (int, int) = (NULL, NULL)):
         GraphicalGate.__init__(self, image_file=image_file, label=label, canvas=canvas, center=center)
         # Holds which inside gates are marked as input/output
         self.connections = {
@@ -696,6 +696,8 @@ class Circuit(GraphicalGate):
 
     @staticmethod
     def construct_copy(old: Circuit, pos: (int, int)) -> Circuit:
+        """Creates a copy of the provided circuit, including the inner gates so that each copy is independent of each
+        other."""
         new_circuit = Circuit(old.get_image_file(), old.get_canvas(), font=old.font, label=old.get_label(), center=pos)
 
         # Create Copies of each gate in the circuit
@@ -713,6 +715,7 @@ class Circuit(GraphicalGate):
 
             new_circuit.add_inner_gate(new_gate)
 
+        # Connect the copied gates in the appropriate manner
         new_gates = new_circuit.get_gates()
         for (i, (old_out_gate1, new_out_gate1)) in enumerate(zip(old_gates, new_gates)):
             for (j, (old_out_gate2, new_out_gate2)) in enumerate(zip(old_gates, new_gates)):
@@ -727,7 +730,7 @@ class Circuit(GraphicalGate):
         self.font = new_font
         self.canvas.itemconfig(self.label_id, font=self.font)
 
-    def add_inner_gate(self, gate: Union[BaseGate]) -> None:
+    def add_inner_gate(self, gate: BaseGate) -> None:
         if gate.get_func() in self.inside_gates.keys():
             self.inside_gates[gate.get_func()].append(gate)
         else:
@@ -781,10 +784,8 @@ class Circuit(GraphicalGate):
                 return self.output_gates[gate]
             else:
                 return []
-        ls = []
-        for gate in self.output_gates:
-            ls += self.output_gates[gate]
-        return ls
+        else:
+            return [self.output_gates[gate] for gate in self.output_gates]
 
     def get_input_gates(self, gate: Optional[BaseGate] = None) -> list[LogicGate | Circuit]:
         if gate:
@@ -792,10 +793,8 @@ class Circuit(GraphicalGate):
                 return self.inputs[gate]
             else:
                 return []
-        ls = []
-        for gate in self.inputs:
-            ls += self.inputs[gate]
-        return ls
+
+        return [self.inputs[gate] for gate in self.inputs]
 
     def get_all_input_gates(self, ls: list) -> list:
         for gate in self.inputs.keys():
@@ -903,7 +902,13 @@ class Circuit(GraphicalGate):
 
         for gate in self.output_gates.keys():
             for out_gate in self.output_gates[gate]:
-                disconnect_circuit_to_lgate(self, gate, out_gate)
+                if is_circuit(out_gate):
+                    for in_base in out_gate.get_io_gates("in"):
+                        for output_circuit_base_output in out_gate.get_input_gates(in_base):
+                            if gate in output_circuit_base_output.get_input_gates():
+                                disconnect_circuit_to_circuit(self, gate, out_gate, output_circuit_base_output)
+                else:
+                    disconnect_circuit_to_lgate(self, gate, out_gate)
 
         self.input_id = self.rect_id = NULL
 

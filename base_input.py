@@ -33,12 +33,12 @@ def new_gate_label(name: str) -> str:
     return name
 
 
-def turn_info_print_off():
+def turn_info_print_off() -> None:
     global INFO_PRINT_ON
     INFO_PRINT_ON = False
 
 
-def turn_info_print_on():
+def turn_info_print_on() -> None:
     global INFO_PRINT_ON
     INFO_PRINT_ON = True
 
@@ -172,8 +172,8 @@ class IntClass:
 
 
 class BaseGate:
-    """The virtual form of the logic gate, just does the gate value calculations.
-       Stores the input gates to calculate its value.  Stores the output gates to update their values."""
+    """The virtual form of the logic gate, does the gate value calculations.
+       Stores the input gates to calculate its current value.  Stores the output gates to update their values."""
     def __init__(self, func: Callable, label: str, ins: Optional[list[BaseGate]] = None,
                  outs: Optional[list[BaseGate]] = None,
                  out: IntClass = IntClass(value=NULL)):

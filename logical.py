@@ -9,7 +9,6 @@
 #   - Scrolling/Resizing for canvas
 #   - Zoom In/Out
 #   - Proper resizing of side pane on font changes
-#   - Method of creating custom circuits to be place and used as other gates
 ########################################################################################################################
 import tkinter
 from enum import *
@@ -116,9 +115,9 @@ class Application(Tk):
         self.active_input_img_index = 0  # Canvas image index of active gate
         # Fonts #####################
         self.active_font = Font(family=Application.font_family, size=Application.font_size, weight=NORMAL,
-                                     slant=tkinter.font.ROMAN)
+                                slant=tkinter.font.ROMAN)
         self.font_top = Font(family=Application.font_family, size=Application.font_size - 1, weight=NORMAL,
-                                  slant=tkinter.font.ROMAN)
+                             slant=tkinter.font.ROMAN)
         #############################
         # ICB Widgets ###############
         self.screen_icb = None  # Canvas gates are placed on
@@ -407,7 +406,7 @@ class Application(Tk):
                     # If both src and dest gates are LogicGates
                     connect_lgate_to_lgate(src_gate, dest_gate)
                     if src_test is not None and dest_test is not None:
-                        connect_ti_to_ti(src_test, dest_test)
+                        connect_bg_to_bg(src_test, dest_test)
                 elif isinstance(src_gate, LogicGate) and isinstance(dest_gate, Circuit):
                     # If src is LogicGate and dest is circuit
                     self.circuit_io_prompt('in', dest_gate)
@@ -422,6 +421,7 @@ class Application(Tk):
                     # Both src and dest are circuits
                     self.circuit_io_prompt('out', src_gate)
                     self.circuit_io_prompt('in', dest_gate)
+                    print("connect_gates(): Both gates are circuits")
                     if self.active_circuit_output_gate is not None and self.active_circuit_input_gate is not None:
                         connect_circuit_to_circuit(src_gate, self.active_circuit_output_gate, dest_gate, self.active_circuit_input_gate)
 
@@ -454,7 +454,7 @@ class Application(Tk):
         self.radio_vars = [IntVar(value=1)]
 
         none_radio = Radiobutton(radio_frame, text="None", font=self.active_font, variable=self.radio_vars[0],
-                                 command=FunctionCallback(self.set_current_io_gate, circuit, None, "",
+                                 command=FunctionCallback(self.set_current_io_gate, circuit, mode, "",
                                                           self.radio_vars[0]))
         none_radio.grid(row=0, column=0, sticky='nsw')
 
@@ -475,11 +475,16 @@ class Application(Tk):
         for radio_var in self.radio_vars:
             if radio_var != var:
                 radio_var.set(0)
-        if mode is None:
-            return
+
         if mode == 'in':
+            if name == "":
+                self.active_circuit_input_gate = None
+                return
             self.active_circuit_input_gate = circuit.get_input(name)
         elif mode == 'out':
+            if name == "":
+                self.active_circuit_output_gate = None
+                return
             self.active_circuit_output_gate = circuit.get_output(name)
 
     def confirm_circuit_io(self) -> None:
@@ -495,7 +500,7 @@ class Application(Tk):
             dest_test = None if not isinstance(self.icb_selected_gates[1], tuple) else self.icb_selected_gates[1][1]
             connect_lgate_to_lgate(src, dest)
             if src_test and dest_test:
-                connect_ti_to_ti(src_test, dest_test)
+                connect_bg_to_bg(src_test, dest_test)
 
             self.deselect_active_gates()
 
@@ -630,7 +635,7 @@ class Application(Tk):
                     #    print("Not connected:", g1, g2)
 
                 if g1_test and g2_test:
-                    disconnect_ti_to_ti(g1_test, g2_test)
+                    disconnect_bg_to_bg(g1_test, g2_test)
 
                 self.deselect_active_gates()
             else:
