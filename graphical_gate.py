@@ -32,7 +32,7 @@ class LineRepository:
     lines = {}
 
     @staticmethod
-    def store(src: GraphicalGate, dest: GraphicalGate, line_id: object) -> None:
+    def store(src: BaseGate, dest: BaseGate, line_id: object) -> None:
         """Stores line_id in a dict with the key (src, dest)"""
         if (dest, src) in LineRepository.lines.keys():  # If this line is already here in a different order, keep it
             LineRepository.lines[(dest, src)] = line_id
@@ -48,7 +48,7 @@ class LineRepository:
                 del LineRepository.lines[key]
 
     @staticmethod
-    def remove_by_key(key: (GraphicalGate, GraphicalGate)) -> None:
+    def remove_by_key(key: (BaseGate, BaseGate)) -> None:
         """Delete line by its key"""
         if key in LineRepository.lines.keys():
             # print("Removed line", LineRepository.lines[key],"between:", key)
@@ -63,7 +63,7 @@ class LineRepository:
             # print("No line between", key[0].get_label(), key[1].get_label())
 
     @staticmethod
-    def get(key: (LogicGate | Circuit, LogicGate | Circuit)) -> int:
+    def get(key: (BaseGate, BaseGate)) -> int:
         """Get line id from key"""
         if key in LineRepository.lines.keys():
             # print("Getting line id: {0} for ({1}, {2})".format(LineRepository.lines[key], key[0], key[1]))
@@ -82,7 +82,7 @@ class LineRepository:
         return ids
 
     @staticmethod
-    def get_all_other_gates(gate) -> list[LogicGate | Circuit]:
+    def get_all_other_gates(gate) -> list[BaseGate]:
         """Gets all gates in which gate is in the key"""
         other_gates = []
         for key in LineRepository.lines.keys():
@@ -165,7 +165,7 @@ class GraphicalGate:
             self.rect_id = -1
 
     def remove_line(self, other: GraphicalGate) -> None:
-        LineRepository.remove_by_key((self, other))
+        pass
 
     def get_input_gates(self) -> list:
         return self.inputs
@@ -288,6 +288,9 @@ class LogicGate(GraphicalGate):
     def get_func(self) -> Callable:
         return self.func
 
+    def remove_line(self, other: LogicGate) -> None:
+        LineRepository.remove_by_key((self.base(), other.base()))
+
     def update_line_colors(self) -> None:
         output_val = self.output()
         if self.output_gates is None:
@@ -295,7 +298,7 @@ class LogicGate(GraphicalGate):
 
         fill = get_line_fill(output_val)
         for out_gate in self.output_gates:
-            self.canvas.itemconfig(LineRepository.get((self, out_gate)), fill=fill)
+            self.canvas.itemconfig(LineRepository.get((self.base(), out_gate.base())), fill=fill)
 
         for gate in self.output_gates:
             gate.update_line_colors()
@@ -312,12 +315,12 @@ class LogicGate(GraphicalGate):
         left_center_pos = (self.top_left()[0], self.get_center()[1])  # Left-Center Point to connect src gates
         for i in range(len(self.inputs)):
             src_pos = (self.inputs[i].bottom_right()[0], self.inputs[i].get_center()[1])
-            self.canvas.coords(LineRepository.get((self.inputs[i], self)), src_pos[0], src_pos[1], left_center_pos[0], left_center_pos[1])
+            self.canvas.coords(LineRepository.get((self.inputs[i].base(), self.base())), src_pos[0], src_pos[1], left_center_pos[0], left_center_pos[1])
         # Update all outgoing lines to new position
         right_center_pos = (self.bottom_right()[0], self.get_center()[1])  # Right-Center Point to connect src gates
         for i in range(len(self.output_gates)):
             dest_pos = (self.output_gates[i].top_left()[0], self.output_gates[i].get_center()[1])
-            self.canvas.coords(LineRepository.get((self, self.output_gates[i])), dest_pos[0], dest_pos[1],
+            self.canvas.coords(LineRepository.get((self.base(), self.output_gates[i].base())), dest_pos[0], dest_pos[1],
                                right_center_pos[0], right_center_pos[1])
 
     def remove_base_connection(self, other: BaseGate, self_is_parent: bool) -> None:
@@ -378,7 +381,7 @@ class OutputGate(LogicGate):
         left_center_pos = (self.top_left()[0], self.get_center()[1])  # Left-Center Point to connect src gates
         for i in range(len(self.inputs)):
             src_pos = (self.inputs[i].bottom_right()[0], self.inputs[i].get_center()[1])
-            self.canvas.coords(LineRepository.get((self.inputs[i], self)), src_pos[0], src_pos[1],
+            self.canvas.coords(LineRepository.get((self.inputs[i].base(), self.base())), src_pos[0], src_pos[1],
                                left_center_pos[0], left_center_pos[1])
 
     def update_line_colors(self) -> None:
@@ -540,7 +543,7 @@ def connect_lgate_to_lgate(src: LogicGate, dest: LogicGate) -> None:
     line_color = get_line_fill(src_out)
 
     line_id = src.get_canvas().create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4, fill=line_color)
-    LineRepository.store(src, dest, line_id)
+    LineRepository.store(src.base(), dest.base(), line_id)
 
     src.update_line_colors()
 
@@ -568,7 +571,7 @@ def connect_lgate_to_circuit(src: LogicGate, circuit: Circuit, dest: BaseGate) -
 
     line_id = src.get_canvas().create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4,
                                            fill=get_line_fill(src.output()))
-    LineRepository.store(src, circuit, line_id)
+    LineRepository.store(src.base(), dest, line_id)
     src.update_line_colors()
 
 
@@ -593,7 +596,7 @@ def connect_circuit_to_lgate(circuit: Circuit, src: BaseGate, dest: LogicGate) -
                         (dest.top_left()[0], dest.get_center()[1])
 
     line_id = circuit.get_canvas().create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4, fill=get_line_fill(src.output()))
-    LineRepository.store(circuit, dest, line_id)
+    LineRepository.store(src, dest.base(), line_id)
 
     circuit.update_line_colors()
 
@@ -618,7 +621,7 @@ def connect_circuit_to_circuit(src_circuit: Circuit, src: BaseGate, dest_circuit
 
     line_id = src_circuit.get_canvas().create_line(src_pos[0], src_pos[1], dest_pos[0], dest_pos[1], width=4,
                                                    fill=get_line_fill(src.output()))
-    LineRepository.store(src_circuit, dest_circuit, line_id)
+    LineRepository.store(src, dest, line_id)
     src_circuit.update_line_colors()
 
 
@@ -641,37 +644,37 @@ def disconnect_lgate_to_lgate(gate1: LogicGate, gate2: LogicGate) -> None:
     src.remove_output(dest)
     dest.remove_input(src)
     dest.set_output(NULL)
-    LineRepository.remove_by_key((src, dest))
+    LineRepository.remove_by_key((src.base(), dest.base()))
     disconnect_bg_to_bg(gate1.base(), gate2.base())
     dest.update_line_colors()
 
 
-def disconnect_circuit_to_lgate(circuit: Circuit, cir_ti: Optional[BaseGate], lgate: LogicGate) -> None:
+def disconnect_circuit_to_lgate(circuit: Circuit, cir_bg: Optional[BaseGate], lgate: LogicGate) -> None:
     """Removes connection between circuit and logic gate"""
-    if cir_ti is None:
+    if cir_bg is None:
         return
 
-    src, dest = (circuit, lgate) if is_parent(cir_ti, lgate.base()) else (lgate, circuit) if is_parent(lgate.base(), cir_ti) else (None, None)
+    src, dest = (circuit, lgate) if is_parent(cir_bg, lgate.base()) else (lgate, circuit) if is_parent(lgate.base(), cir_bg) else (None, None)
     if not src or not dest:
         return
-    src.remove_output(dest) if isinstance(src, LogicGate) else src.remove_output(dest, cir_ti)
+    src.remove_output(dest) if isinstance(src, LogicGate) else src.remove_output(dest, cir_bg)
     dest.remove_input(src)
-    dest.set_output(NULL) if isinstance(dest, LogicGate) else dest.set_output(NULL, cir_ti)
-    LineRepository.remove_by_key((src, dest))
-    disconnect_bg_to_bg(cir_ti, lgate.base())
+    dest.set_output(NULL) if isinstance(dest, LogicGate) else dest.set_output(NULL, cir_bg)
+    LineRepository.remove_by_key((cir_bg, lgate.base()))
+    disconnect_bg_to_bg(cir_bg, lgate.base())
     dest.update_line_colors()
 
 
-def disconnect_circuit_to_circuit(circuit1: Circuit, cir_ti1: BaseGate, circuit2: Circuit, cir_ti2: BaseGate) -> None:
+def disconnect_circuit_to_circuit(circuit1: Circuit, cir_bg1: BaseGate, circuit2: Circuit, cir_bg2: BaseGate) -> None:
     # Determine whichi Circuit, BaseGate tuple is the child and parent
-    (src, src_base), (dest, dest_base) = ((circuit1, cir_ti1), (circuit2, cir_ti2)) if is_parent(cir_ti1, cir_ti2) else ((circuit2, cir_ti2), (circuit1, cir_ti1)) if is_parent(cir_ti2, cir_ti1) else ((None, None), (None, None))
+    (src, src_base), (dest, dest_base) = ((circuit1, cir_bg1), (circuit2, cir_bg2)) if is_parent(cir_bg1, cir_bg2) else ((circuit2, cir_bg2), (circuit1, cir_bg1)) if is_parent(cir_bg2, cir_bg1) else ((None, None), (None, None))
     if not src or not dest:
         return
     src.remove_output(dest, src_base)
     dest.remove_input(src, dest_base)
-    dest.set_output(NULL, cir_ti2)
-    LineRepository.remove_by_key((src, dest))
-    disconnect_bg_to_bg(cir_ti1, cir_ti2)
+    dest.set_output(NULL, cir_bg2)
+    LineRepository.remove_by_key((cir_bg1, cir_bg2))
+    disconnect_bg_to_bg(cir_bg1, cir_bg2)
     dest.update_line_colors()
 
 
@@ -746,7 +749,7 @@ class Circuit(GraphicalGate):
             if gate:
                 fill = get_line_fill(gate.output())
                 for dest_gate in self.output_gates[gate]:
-                    self.canvas.itemconfig(LineRepository.get((self, dest_gate)), fill=fill)
+                    self.canvas.itemconfig(LineRepository.get((gate, dest_gate)), fill=fill)
                     dest_gate.update_line_colors()
 
     def move(self, x: int, y: int) -> None:

@@ -898,25 +898,29 @@ class Application(Tk):
         self.filename = ""
 
     def help(self) -> None:
+
         self.help_window = Toplevel(self)
         self.help_window.title("Help")
         self.help_window.resizable(False, False)
 
-        win_x = self.winfo_rootx() + self.width // 3
-        win_y = 0
+        win_x = self.winfo_rootx()  # + self.width // 3
+        win_y = self.winfo_rooty()
         self.help_window.geometry(f'+{win_x}+{win_y}')
 
         self.help_window.wait_visibility()
         self.help_window.grab_set()
         self.help_window.transient(self)
 
-        scrollable_frame = Frame(self.help_window)
+        help_window_width = 770
+        help_window_height = 600
+        scrollable_frame = ScrollableFrame(self.help_window, this_font=self.active_font, width=help_window_width,
+                                           height=help_window_height)
         scrollable_frame.grid(padx=(10, 10), pady=(10, 10), sticky='news')
 
         # Shortcut Entries #############################################################################################
-        shortcut_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Shortcuts")
+        shortcut_labelframe = LabelFrame(scrollable_frame.frame, font=self.active_font, text="Shortcuts")
         shortcut_labelframe.grid(column=0, row=0, sticky='news', pady=(0, 5))
-        shortcut_entry_width = 15
+        shortcut_entry_width = 17
         drag_gate_shortcut = LabeledEntry(shortcut_labelframe, label_text="Select Gate:", entry_text="Left Click",
                                           entry_width=shortcut_entry_width, widget_font=self.active_font, disabled=True)
         drag_gate_shortcut.grid(row=0, column=0, sticky='nse', pady=(0, 5))
@@ -976,7 +980,7 @@ class Application(Tk):
         save_shortcut.grid(row=5, column=1, sticky='nse', pady=(0, 5))
         ################################################################################################################
         # Line Colors ############################################################################################
-        line_color_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Line Colors")
+        line_color_labelframe = LabelFrame(scrollable_frame.frame, font=self.active_font, text="Line Colors")
         line_color_labelframe.grid(row=1, column=0, sticky='news', pady=(0, 5))
 
         powered_label = LabeledEntry(line_color_labelframe, label_text="Green",
@@ -996,47 +1000,48 @@ class Application(Tk):
         missing_power_label.grid(row=1, columnspan=2, padx=(0, 0), pady=(0, 5))
 
         # Gate Descriptions ############################################################################################
-        desc_labelframe = LabelFrame(scrollable_frame, font=self.active_font, text="Gate Descriptions")
+        desc_labelframe = LabelFrame(scrollable_frame.frame, font=self.active_font, text="Gate Descriptions")
         desc_labelframe.grid(row=2, column=0, sticky='news', padx=(0, 0), pady=(5, 5))
-
+        desc_height = 5
+        desc_width = 24
         power_desc = PictureDescription(desc_labelframe, img=self.gates[power]["image"],
                                         desc_text=self.gates[power]["desc"],
-                                        text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
+                                        text_width=desc_width, text_height=desc_height, this_font=self.active_font, scrollbar_on=False)
         power_desc.grid(row=0, column=0)
 
         not_desc = PictureDescription(desc_labelframe, img=self.gates[logic_not]["image"],
                                       desc_text=self.gates[logic_not]["desc"],
-                                      text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
+                                      text_width=desc_width, text_height=desc_height, this_font=self.active_font, scrollbar_on=False)
         not_desc.grid(row=0, column=1)
 
         and_desc = PictureDescription(desc_labelframe, img=self.gates[logic_and]["image"],
                                       desc_text=self.gates[logic_and]["desc"],
-                                      text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
+                                      text_width=desc_width, text_height=desc_height, this_font=self.active_font, scrollbar_on=False)
         and_desc.grid(row=1, column=0)
 
         nand_desc = PictureDescription(desc_labelframe, img=self.gates[logic_nand]["image"],
                                        desc_text=self.gates[logic_nand]["desc"],
-                                       text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
+                                       text_width=desc_width, text_height=desc_height, this_font=self.active_font, scrollbar_on=False)
         nand_desc.grid(row=1, column=1)
 
         or_desc = PictureDescription(desc_labelframe, img=self.gates[logic_or]["image"],
                                      desc_text=self.gates[logic_or]["desc"],
-                                     text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
+                                     text_width=desc_width, text_height=desc_height, this_font=self.active_font, scrollbar_on=False)
         or_desc.grid(row=2, column=0)
 
         xor_desc = PictureDescription(desc_labelframe, img=self.gates[logic_xor]["image"],
                                       desc_text=self.gates[logic_xor]["desc"],
-                                      text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
+                                      text_width=desc_width, text_height=desc_height, this_font=self.active_font, scrollbar_on=False)
         xor_desc.grid(row=2, column=1)
 
         output_desc = PictureDescription(desc_labelframe, img=self.gates[output]["image"],
                                          desc_text=self.gates[output]["desc"],
-                                         text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
+                                         text_width=desc_width, text_height=desc_height, this_font=self.active_font, scrollbar_on=False)
         output_desc.grid(row=3, column=0)
 
         clock_desc = PictureDescription(desc_labelframe, img=self.gates[logic_clock]["image"],
                                         desc_text=self.gates[logic_clock]["desc"],
-                                        text_width=24, text_height=4, this_font=self.active_font, scrollbar_on=False)
+                                        text_width=desc_width, text_height=desc_height, this_font=self.active_font, scrollbar_on=False)
         clock_desc.grid(row=3, column=1, padx=(25, 0))
         # self.update_idletasks()
 
