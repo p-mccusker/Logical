@@ -693,52 +693,68 @@ class Application(Tk):
         if self.filename == "":  # If the program has not been saved before, prompt for filename
             log_msg(INFO, "No save file has been specified.")
             self.save_as()
-            if self.filename == None:
+            if self.filename is None:
                 return
 
         log_msg(INFO, "Saving diagram to: " + self.filename)
-        with open(self.filename, 'w') as save_file:
-            self.deselect_active_gates()
-            self.reset()
-            gates = self.get_gate_list()
 
-            for idx, gate in enumerate(gates):
-                # For each gate, write the gate and its enumeration, which is used as its id
-                print("{0},{1}".format(gate, int(idx)), file=save_file)
-                gates[idx] = (gate, idx)
+        doc = tomlkit.document()
 
-            print(self.file_separator, file=save_file)  # Add seperator between the gates and their connections
+        gate_info = tomlkit.table()
+        gates = self.get_gate_list()
+        gate_info.add("Total", len(gates))
 
-            # Write connections to file
-            # Get the input and output gates for each gate, convert each gate to its id and write to file
-            for (gate, cnt) in gates:
-                in_gates = gate.get_input_gates()
-                out_gates = gate.get_output_gates()
+        for idx, gate in enumerate(gates):
+            # For each gate, write the gate and its enumeration, which is used as its id
+            gate_table = tomlkit.inline_table().indent(1)
+            gate_table.add("Function", gate.get_func().__name__)
+            gate_table.add("Center", gate.get_center())
+            if is_clock(gate):
+                gate_table.add("Default_State", gate.default_state)
+                gate_table.add("Rate", gate.get_rate())
+            else:
+                gate_table.add("Output", gate.out.get())
+                gate_table.add("Custom_Label", gate.get_label() if is_power_gate(gate) else "")
 
-                # Get the id of each input gate, store in list
-                # Strip spaces from input and output gate lists to simplify reading
-                in_fmt = "[" if len(in_gates) > 0 else "[]"
-                for in_gate in in_gates:
+            gate_table.add("Gate_ID", idx)
+
+            gate_info[str(idx)] = gate_table
+            gates[idx] = (gate, idx)
+
+        doc["Gates"] = gate_info
+
+        connection_table = tomlkit.table()
+
+        for (gate, cnt) in gates:
+            in_gates = gate.get_input_gates()
+            out_gates = gate.get_output_gates()
+            gate_con_table = tomlkit.inline_table().indent(1)
+
+            gate_inputs = tomlkit.array()
+            for in_gate in in_gates:
+                for other_gate in gates:
+                    if other_gate[0] == in_gate:
+                        gate_inputs.append(other_gate[1])
+                        break
+            gate_con_table.add("Inputs", gate_inputs)
+
+            # For every output, find the gate in the master list and add its id number to the list,
+            # to reconstruct later
+            gate_outputs = tomlkit.array()
+            if out_gates:
+                for out_gate in out_gates:
                     for other_gate in gates:
-                        if other_gate[0] == in_gate:
-                            in_fmt += str(other_gate[1]) + "|"
+                        if other_gate[0] == out_gate:
+                            gate_outputs.append(other_gate[1])
                             break
-                in_fmt = in_fmt[:-1] + ']'
+            gate_con_table.add("Outputs", gate_outputs)
 
-                # For every output, find the gate in the master list and add its id number to the list,
-                # to reconstruct later
-                if out_gates:
-                    out_fmt = "[" if len(out_gates) > 0 else "[]"
-                    for out_gate in out_gates:
-                        for other_gate in gates:
-                            if other_gate[0] == out_gate:
-                                out_fmt += str(other_gate[1]) + "|"
-                                break
-                    out_fmt = out_fmt[:-1] + ']'
-                else:
-                    out_fmt = '[]'
+            connection_table[str(cnt)] = gate_con_table
 
-                print('{0},{1},{2}'.format(cnt, in_fmt, out_fmt), file=save_file)
+        doc["Connections"] = connection_table
+
+        with open(self.filename, mode="wt", encoding="utf-8") as fp:
+            tomlkit.dump(doc, fp)
 
     def save_circuit(self, circuit: Circuit) -> None:
         doc = tomlkit.document()
@@ -759,11 +775,9 @@ class Application(Tk):
         self.filename = fd.asksaveasfilename(initialfile=self.filename, initialdir=self.save_path,
                                              filetypes=[("Circuit Diagram", "*" + self.file_type)])
         if len(self.filename) == 0:
-            self.filename = None
-        elif len(self.filename) < 4 or  (len(self.filename) > 4  and self.filename[len(self.filename)-5:] == self.file_type):
+            self.filename = ""
+        elif len(self.filename) < 4 or ( len(self.filename) > 4 and self.filename[-4:] != self.file_type):
             self.filename += self.file_type
-        else:
-            print("Neither")
 
     def save_temp(self) -> None:
         tmp = self.filename
@@ -772,98 +786,74 @@ class Application(Tk):
         self.filename = tmp
 
     def open(self, event: Optional[Event] = None) -> None:
-        """"Load circuit from file.  Eventually use tomlkit to create nicelly formatted file."""
+        """Load circuit from file.  Eventually use tomlkit to create nicely formatted file."""
         if self.filename != self.tmp_save_filename:
             self.filename = fd.askopenfilename(initialdir=self.save_path,
                                                filetypes=[("Circuit Diagram", "*" + self.file_type)])
-
         if self.filename == "":
             return
 
         log_msg(INFO, "Loading diagram: " + os.path.abspath(self.filename))
-        with open(self.filename, 'r') as load_file:
+
+        with open(self.filename, mode="rt", encoding="utf-8") as fp:
             self.clear()
-
-            # Get list of lines in file, then parse each line
-            file_lines = load_file.readlines()
-            connection_start_index = -1
+            document = tomlkit.load(fp)
             gates = []
-            for idx, line in enumerate(file_lines):  # Load every gate into the canvas
-                if line.strip() == self.file_separator:
-                    connection_start_index = idx + 1
-                    break
 
-                line_list = line.strip('\n').split(sep=',')
-                # line_list[0]: Function Name
-                # line_list[1]: Center X of Gate on canvas
-                # line_list[2]: Center Y of Gate on canvas
-                # line_list[3]: Gate Output
-                # line_list[-1]: Gate Num
-                gate_func = self.gates.func_from_name(line_list[0])  # get_logic_func_from_name(line_list[0])
-                # Strip parenthesis and space from center str, then split
-                gate_inst = len(self.gates[gate_func].get_active_gates()) + 1
-                position_x = int(line_list[1].strip("("))
-                position_y = int(line_list[2].strip(") "))
-                gate_out = int(line_list[3])
-                gate_center = (position_x, position_y)
-                gate = None
+            for idx in range(int(document["Gates"]["Total"])):  # Load every gate into the canvas
+                gate_func = get_logic_func_from_name(document["Gates"][str(idx)]["Function"])
+                gate_inst = str(len(self.gates[gate_func].get_active_gates()) + 1)
+                gate_center = document["Gates"][str(idx)]["Center"]
+                image_file = self.gates[gate_func]["image_file"]
+
                 if gate_func == logic_clock:  # If this input is clock, it has a different format
-                    # line_list[3]: Default Value
-                    # line_list[4]: Update Rate
-                    # line_list[5]: gate number
-                    gate = ClockTk(image_file=self.gates.attr(gate_func, "image_file"), update_rate=float(line_list[4]),
-                                   label="Clock #" + str(gate_inst),
-                                   canvas=self.screen_icb, center=gate_center, default_state=int(line_list[5]))
-                elif gate_func == output:  # Otherwise all the other gates have the same format
-                    gate = OutputGate(image_file=self.gates.attr(gate_func, "image_file"),
-                                      label=capitalize(gate_func.__name__ + " #" + str(gate_inst)),
-                                      canvas=self.screen_icb, center=gate_center, out=gate_out)
-
+                    rate = document["Gates"][str(idx)]["Rate"]
+                    state = document["Gates"][str(idx)]["Default_State"]
+                    gate = ClockTk(image_file=image_file, update_rate=rate, label="Clock #" + gate_inst,
+                                   canvas=self.screen_icb, center=gate_center, default_state=state)
+                elif gate_func == output:
+                    gate_out = document["Gates"][str(idx)]["Output"]
+                    gate_label = capitalize(gate_func.__name__ + " #" + gate_inst)
+                    gate = OutputGate(image_file=image_file, label=gate_label, canvas=self.screen_icb,
+                                      center=gate_center, out=gate_out)
                 else:
-                    gate = LogicGate(func=gate_func, image_file=self.gates.attr(gate_func, "image_file"),
-                                     label=capitalize(gate_func.__name__ + " #" + str(gate_inst)),
-                                     canvas=self.screen_icb, center=gate_center, out=gate_out)
+                    gate_out = document["Gates"][str(idx)]["Output"]
+                    if gate_func == power:  # If power gate has a custom label...
+                        gate_label = document["Gates"][str(idx)]["Custom_Label"]
+                    else:
+                        gate_label = capitalize(gate_func.__name__ + " #" + gate_inst)
+
+                    gate = LogicGate(func=gate_func, image_file=image_file,
+                                     label=gate_label, canvas=self.screen_icb, center=gate_center, out=gate_out)
                     if is_power_gate(gate):
+                        # Add power gate to appropriate table
                         self.is_edit_table.add_entry(gate)
-                        gate.set_label("Power #" + str(gate_inst))
+
                 gates.append((gate, idx))
                 self.gates[gate_func].add_active_gate(gate)
 
-            # Strip input gate section from file to work with connections
-            file_lines = file_lines[connection_start_index:]
-            for connection_line in file_lines:
-                connection_line = connection_line.strip()
-                line_list = connection_line.split(sep=',')
-                # line_list[0]: gate id
-                # line_list[1]: gate input ids
-                # line_list[2]: gate output ids
-                curr_gate_id = int(line_list[0])
+            for idx in range(int(document["Gates"]["Total"])):  # Load connection info for every gate
                 current_gate = None
                 for (gate, num) in gates:
-                    if num == curr_gate_id:
+                    if num == idx:
                         current_gate = gate
                         break
 
                 # Read gate inputs
                 # Find input gates based on gate num
-                inputs_id_list = [int(input_gate_num) for input_gate_num in line_list[1][1:-1].split('|')] \
-                    if len(line_list[1]) != 2 else []
-
-                outputs_id_list = [int(output_gate_num) for output_gate_num in line_list[2][1:-1].split('|')] \
-                    if len(line_list[2]) != 2 else []
+                inputs_id_list = document["Connections"][str(idx)]["Inputs"]
+                outputs_id_list = document["Connections"][str(idx)]["Outputs"]
 
                 # Get list of input and output gates using gate ids
                 for input_id in inputs_id_list:
                     for (gate, num) in gates:
                         if num == input_id:
-                            # connect_gates(gate, current_gate)
                             connect_lgate_to_lgate(gate, current_gate)
                             break
 
                 for output_id in outputs_id_list:
                     for (gate, num) in gates:
                         if num == output_id:
-                            # connect_gates(current_gate, gate)
                             connect_lgate_to_lgate(current_gate, gate)
                             break
 
@@ -1099,53 +1089,53 @@ class Application(Tk):
 
     def set_active_fn_power(self) -> None:
         self.icb_is_gate_active = True
-        self.active_input = LogicGate(power, self.gates.attr(power, "image_file"), label="Power #",
+        self.active_input = LogicGate(power, self.gates[power]["image_file"], label="Power #",
                                       canvas=self.screen_icb,
                                       out=TRUE)
-        self.active_input_pi_fn = self.gates.attr(power, "image_file")
+        self.active_input_pi_fn = self.gates[power]["image_file"]
 
     def set_active_fn_and(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = LogicGate(logic_and, self.gates.attr(logic_and, "image_file"), label="And Gate #",
+        self.active_input = LogicGate(logic_and, self.gates[logic_and]["image_file"], label="And Gate #",
                                       canvas=self.screen_icb)
-        self.active_input_pi_fn = self.gates.attr(logic_and, "image_file")
+        self.active_input_pi_fn = self.gates[logic_and]["image_file"]
 
     def set_active_fn_nand(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = LogicGate(logic_nand, self.gates.attr(logic_nand, "image_file"), label="Nand Gate #",
+        self.active_input = LogicGate(logic_nand, self.gates[logic_nand]["image_file"], label="Nand Gate #",
                                       canvas=self.screen_icb)
-        self.active_input_pi_fn = self.gates.attr(logic_nand, "image_file")
+        self.active_input_pi_fn = self.gates[logic_nand]["image_file"]
 
     def set_active_fn_xor(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = LogicGate(logic_xor, self.gates.attr(logic_xor, "image_file"), label="Xor Gate #",
+        self.active_input = LogicGate(logic_xor, self.gates[logic_xor]["image_file"], label="Xor Gate #",
                                       canvas=self.screen_icb)
-        self.active_input_pi_fn = self.gates.attr(logic_xor, "image_file")
+        self.active_input_pi_fn = self.gates[logic_xor]["image_file"]
 
     def set_active_fn_not(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = LogicGate(logic_not, self.gates.attr(logic_not, "image_file"), label="Not Gate #",
+        self.active_input = LogicGate(logic_not, self.gates[logic_not]["image_file"], label="Not Gate #",
                                       canvas=self.screen_icb)
-        self.active_input_pi_fn = self.gates.attr(logic_not, "image_file")
+        self.active_input_pi_fn = self.gates[logic_not]["image_file"]
 
     def set_active_fn_or(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = LogicGate(logic_or, self.gates.attr(logic_or, "image_file"), label="Or Gate #",
+        self.active_input = LogicGate(logic_or, self.gates[logic_or]["image_file"], label="Or Gate #",
                                       canvas=self.screen_icb)
-        self.active_input_pi_fn = self.gates.attr(logic_or, "image_file")
+        self.active_input_pi_fn = self.gates[logic_or]["image_file"]
 
     def set_active_fn_clock(self) -> None:
         self.deselect_active_gates()
         self.icb_is_gate_active = True
-        self.active_input = ClockTk(self.gates.attr(logic_clock, "image_file"), self.default_update_rate,
+        self.active_input = ClockTk(self.gates[logic_clock]["image_file"], self.default_update_rate,
                                     label="Clock #",
                                     canvas=self.screen_icb)
-        self.active_input_pi_fn = self.gates.attr(logic_clock, "image_file")
+        self.active_input_pi_fn = self.gates[logic_clock]["image_file"]
 
     def set_active_fn_custom_circuit(self, index: int) -> None:
         if index < len(self.circuits):
@@ -1216,7 +1206,7 @@ class Application(Tk):
                                  background=self.background_color.get(), highlightthickness=0)
         self.screen_icb.grid(row=0, column=0, sticky="new")
         self.screen_icb.grid_propagate(False)
-
+        # Set key bindings
         self.screen_icb.bind('<Motion>', self.motion_cb)
         self.screen_icb.bind('<Button-1>', self.left_click_cb)
         self.screen_icb.bind('<B1-Motion>', self.click_and_drag_cb)
@@ -1232,8 +1222,10 @@ class Application(Tk):
         self.screen_icb.bind('<space>', self.toggle_play_pause)
         # Force the canvas to stay focused, keybindings only take effect when this widget has focus
         self.screen_icb.focus_force()
+        LineRepository.set_canvas(self.screen_icb)
 
     def gui_build_context_menu(self):
+        """Builds the menu which appears when right-clicking in the circuit building mod"""
         self.circuit_context_menu = Popup(self, tearoff=0, menu_mode=True, font=self.active_font)
         self.circuit_context_menu.add_command(label="Connect", command=self.draw_gate_connection)
         self.circuit_context_menu.add_separator()
@@ -1245,6 +1237,7 @@ class Application(Tk):
         self.output_label_names = []
 
     def gui_build_circuit_pane(self) -> None:
+        """Creates the custom circuit pane"""
         self.circuit_border_frame = Frame(self, background='black',
                                           width=self.width - self.input_selection_screen_width - self.border_width,
                                           height=self.circuit_screen_height)
@@ -1274,6 +1267,7 @@ class Application(Tk):
             button.grid_configure(column=i, row=0)
 
     def set_button_state_for_circuit_builder(self, state: str) -> None:
+        """Disables invalid buttons when entering circuit building mode"""
         for func in [power, logic_clock, output]:
             (btn, frame) = self.is_buttons[func]
             btn.configure(state=state)
@@ -1282,6 +1276,7 @@ class Application(Tk):
         self.new_circuit_button.buttonconfig(state=state)
 
     def gui_enter_circuit_builder(self) -> None:
+        """Switches program to circuit building mode"""
         self.save_temp()
         self.clear()
 
@@ -1378,20 +1373,20 @@ class Application(Tk):
         self.active_circuit.set_label(self.circuit_name_entry.get())
         self.active_circuit.set_image_file(join_folder_file(CIRCUIT_IMG_FOLDER, self.circuit_image_entry.get()))
         for (i, entry) in enumerate(self.cir_inp_names):
-            # If input nam entry is black or the same as another entry, just give it a stock name
+            # If input name entry is blank or the same as another entry, just give it a stock name
             if entry.get() == "" or (i < len(self.cir_inp_names) and entry.get() in self.cir_inp_names[i + 1:]):
                 label = str(i)
             else:
                 label = entry.get()
 
         for (i, entry) in enumerate(self.cir_out_names):
-            # If input nam entry is black or the same as another entry, just give it a stock name
+            # If output name entry is blank or the same as another entry, just give it a stock name
             if entry.get() == "" or (i < len(self.cir_out_names) and entry.get() in self.cir_out_names[i + 1:]):
                 label = str(i)
             else:
                 label = entry.get()
 
-        self.circuit_pi = PhotoImage(file=join_folder_file(CIRCUIT_IMG_FOLDER, "blank_circuit.png"))
+        self.circuit_pi = PhotoImage(file=join_folder_file(CIRCUIT_IMG_FOLDER, self.circuit_image_entry.get()))
         self.custom_circuit_pis.append(self.circuit_pi)
         self.custom_circuit_button = LabeledButton(self.circuit_frame, label_direction=tkinter.S,
                                                    button_content=self.circuit_pi,
@@ -1407,7 +1402,7 @@ class Application(Tk):
         self.gates.register_circuit(self.active_circuit,
                                     callback=FunctionCallback(self.set_active_fn_custom_circuit,
                                                               len(self.circuit_buttons)),
-                                    image_file=join_folder_file(CIRCUIT_IMG_FOLDER, "blank_circuit.png"))
+                                    image_file=join_folder_file(CIRCUIT_IMG_FOLDER, self.circuit_image_entry.get()))
 
     def make_input_entry_list(self, *args):
         if self.circuit_input_lbframe is not None:

@@ -144,7 +144,7 @@ CIRCUIT_IMG_FOLDER = "images/custom_circuits"
 class FunctionCallback:
     """Stores a function, its positional arguments, and it's named arguments.
        Useful for when you need a callback function that takes arguments"""
-    def __init__(self, fn: Callable, *args, **kwargs):  #: Optional[list] = None):
+    def __init__(self, fn: Callable, *args, **kwargs):
         self.fn = fn
         self.args = [*args]
         self.kwargs = {**kwargs}
@@ -173,7 +173,7 @@ class IntClass:
 
 class BaseGate:
     """The virtual form of the logic gate, does the gate value calculations.
-       Stores the input gates to calculate its current value.  Stores the output gates to update their values."""
+       Stores the input gates to calculate its current value.  Updates the values of its output gates"""
     def __init__(self, func: Callable, label: str, ins: Optional[list[BaseGate]] = None,
                  outs: Optional[list[BaseGate]] = None,
                  out: IntClass = IntClass(value=NULL)):
@@ -189,15 +189,17 @@ class BaseGate:
         if len(self.inputs) == 0:
             return self.out.get()
 
+        # Evaluate value using breadth-first calculation
         self.out.set(self.func([inp.output() for inp in self.inputs]))
 
         return self.out.get()
 
     def set_label(self, label: str) -> None:
-        """Set gate name"""
+        """Sets gate name"""
         self.label = label
 
     def get_label(self) -> str:
+        """Gets gate name"""
         return self.label
 
     def remove_input(self, inp: BaseGate) -> None:
@@ -222,9 +224,11 @@ class BaseGate:
         return self.func
 
     def get_input_gates(self) -> list[BaseGate]:
+        """Returns list of immediate parent gates"""
         return self.inputs
 
     def get_output_gates(self) -> list[BaseGate]:
+        """Returns list of immediate child gates"""
         return self.output_gates
 
     def set_output(self, out: int) -> None:
@@ -253,6 +257,7 @@ class BaseGate:
 
 
 def test_half_adder():
+    log_msg(INFO, "Testing half-adder functionality")
     inputs = [[0, 0],
               [0, 1],
               [1, 0],
@@ -271,6 +276,7 @@ def test_half_adder():
 
 
 def test_full_adder():
+    log_msg(INFO, "Testing full-adder functionality")
     inputs = [[0, 0, 0],
               [0, 0, 1],
               [0, 1, 0],

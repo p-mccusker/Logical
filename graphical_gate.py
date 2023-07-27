@@ -26,10 +26,37 @@ def logic_clock(gate) -> int:
     return gate.output()
 
 
+def get_logic_func_from_name(name: str) -> Optional[Callable]:
+    if name == logic_not.__name__:
+        return logic_not
+    elif name == logic_and.__name__:
+        return logic_and
+    elif name == logic_nand.__name__:
+        return logic_nand
+    elif name == logic_or.__name__:
+        return logic_or
+    elif name == logic_xor.__name__:
+        return logic_xor
+    elif name == power.__name__:
+        return power
+    elif name == output.__name__:
+        return output
+    elif name == logic_clock.__name__:
+        return logic_clock
+    else:
+        print("Invalid name:", name)
+        return None
+
+
 class LineRepository:
     """Stores the lines between gates.  The tuple (source gate, destination gate) is the key to get the Canvas item id
        which can be used to modify/delete the line"""
     lines = {}
+    canvas = None
+
+    @staticmethod
+    def set_canvas(canvas: Canvas):
+        LineRepository.canvas = canvas
 
     @staticmethod
     def store(src: BaseGate, dest: BaseGate, line_id: object) -> None:
@@ -44,7 +71,7 @@ class LineRepository:
         """Delete line by its id"""
         for key in LineRepository.lines.keys():
             if LineRepository.lines[key] == line_id:
-                key[0].get_canvas().delete(LineRepository.lines[key])
+                LineRepository.canvas.delete(LineRepository.lines[key])
                 del LineRepository.lines[key]
 
     @staticmethod
@@ -52,11 +79,11 @@ class LineRepository:
         """Delete line by its key"""
         if key in LineRepository.lines.keys():
             # print("Removed line", LineRepository.lines[key],"between:", key)
-            key[0].get_canvas().delete(LineRepository.lines[key])
+            LineRepository.canvas.delete(LineRepository.lines[key])
             del LineRepository.lines[key]
         elif key[::-1] in LineRepository.lines.keys():  # Check if the reversed key is in the repo
             # print("Removed line", LineRepository.lines[key[::-1]],"between:", key[::-1])
-            key[0].get_canvas().delete(LineRepository.lines[key[::-1]])
+            LineRepository.canvas.delete(LineRepository.lines[key[::-1]])
             del LineRepository.lines[key[::-1]]
         else:
             pass
