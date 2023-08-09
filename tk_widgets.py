@@ -251,7 +251,7 @@ class CheckbuttonTable(LabelFrame):
         self.canvas.create_window((1, 1), window=self.frame, anchor="nw", tags="self.frame")
         self.frame.bind("<Configure>", self.on_frame_configure)
 
-        self.empty_text_label = Label(self.frame, bg="white", text="No Power Gates...", font=this_font)
+        self.empty_text_label = Label(self.frame, bg="white", text="No Inputs...", font=this_font)
         self.empty_text_label.grid(row=0, column=0, sticky='')
 
     def config_dims(self, width: Optional[int] = None, height: Optional[int] = None) -> None:
@@ -334,7 +334,7 @@ class CheckbuttonTable(LabelFrame):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
 
-class ScrollableFrame(Frame):
+class ScrollableVFrame(Frame):
 
     def __init__(self, *args, this_font: Font, bg_color: Optional[str] = None, **kwargs):
         Frame.__init__(self, *args, **kwargs)
@@ -357,6 +357,37 @@ class ScrollableFrame(Frame):
     def on_frame_configure(self, event):
         """Reset the scroll region to encompass the inner frame"""
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+
+
+class ScrollableHFrame(Frame):
+
+    def __init__(self, *args, this_font: Union[Font, Tuple[str, int]], bg_color: Optional[str] = None, **kwargs):
+        Frame.__init__(self, *args, **kwargs)
+        self.canvas = Canvas(self, highlightthickness=0, width=self.winfo_reqwidth(), height=self.winfo_reqheight())
+        self.frame = Frame(self.canvas, width=self.winfo_reqwidth(), height=self.winfo_reqheight())
+        self.this_font = this_font
+        self.scrollbar = Scrollbar(self, orient="horizontal", command=self.canvas.xview)
+        self.canvas.configure(xscrollcommand=self.scrollbar.set)
+        self.scrollbar.grid(row=1, column=0, sticky='swe', pady=(0, 0))
+        self.canvas.grid(row=0, column=0, sticky='nwe', padx=(0, 0))
+
+        if bg_color is not None:
+            self.config(background=bg_color)
+            self.canvas.config(background=bg_color)
+            self.frame.config(background=bg_color)
+
+        self.canvas.create_window((0, 0), window=self.frame, anchor="nw", tags="self.frame")
+        self.frame.bind("<Configure>", self.on_frame_configure)
+
+    def on_frame_configure(self, event: Event) -> None:
+        """Reset the scroll region to encompass the inner frame"""
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def resize(self, width: int, height: int) -> None:
+        self.config(width=width, height=height)
+        self.canvas.config(width=width, height=height)
+        self.frame.config(width=width, height=height)
 
 
 class LabeledButton(Frame):

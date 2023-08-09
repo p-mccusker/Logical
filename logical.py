@@ -119,6 +119,7 @@ class CustomCircuitWidgets:
         self.active_circuit_input_gate = None
         self.active_circuit_output_gate = None
         self.circuit_action_width = circuit_action_width
+        self.circuit_action_frame = None
         self.circuit_prompt = None
         self.circuit_io_window = None
         self.radio_vars = None
@@ -133,6 +134,8 @@ class CustomCircuitWidgets:
         self.cir_labelframe = None
         self.circuit_context_in_index = -1
         self.circuit_context_out_index = -1
+        self.circuit_scrollbar_height = 13
+
 
 class HelpWindowWidgets:
     def __init__(self):
@@ -215,7 +218,7 @@ class Application(Tk):
         self.widgets_input_selection = InputSelectionWidgets()
         #############################
         # Custom Circuit Widgets ####
-        self.widgets_custom_circuit = CustomCircuitWidgets(circuit_action_width=100)
+        self.widgets_custom_circuit = CustomCircuitWidgets(circuit_action_width=175)
         #############################
         # Timer Window Widgets ######
         self.widgets_timer = TimerWidgets(self.default_update_rate)
@@ -965,7 +968,7 @@ class Application(Tk):
 
         help_window_width = 770
         help_window_height = 600
-        scrollable_frame = ScrollableFrame(self.help_window, this_font=self.active_font, width=help_window_width,
+        scrollable_frame = ScrollableVFrame(self.help_window, this_font=self.active_font, width=help_window_width,
                                            height=help_window_height)
         scrollable_frame.grid(padx=(10, 10), pady=(10, 10), sticky='news')
 
@@ -1157,10 +1160,11 @@ class Application(Tk):
             self.active_input = OutputGate(self.gates.attr(output, "image_file"), label="Output #",
                                            canvas=can_wid.screen_icb)
         else:
-            self.active_input = LogicGate(fn, self.gates[fn]["image_file"], label=capitalize(fn.__name__ + " Source #"),
+            self.active_input = LogicGate(fn, self.gates[fn]["image_file"], label=capitalize(fn.__name__ + " #"),
                                           canvas=can_wid.screen_icb)
             if fn == power:
                 self.active_input.set_output(TRUE)
+                self.active_input.set_label("Input #")
         self.active_input_pi_fn = self.gates[fn]["image_file"]
 
     def set_active_fn_custom_circuit(self, index: int) -> None:
@@ -1200,11 +1204,16 @@ class Application(Tk):
             if i == len(self.gates) - 1:
                 labeled_button_frame.grid_configure(pady=(0, 5))
 
-            if func not in (output, power):
+            label_text = ""
+            if func not in (output, power, logic_clock):
                 # Strip logic_ from each logic gate name
                 label_text = capitalize(self.gates.attr(func, "name")[6:]) + " Gate:"
-            else:
-                label_text = capitalize(self.gates.attr(func, "name")) + " Gate:"
+            elif func == power:
+                label_text = "Input:"
+            elif func == output:
+                label_text = "Output:"
+            elif func == logic_clock:
+                label_text = "Clock:"
 
             button_label = Label(labeled_button_frame, text=label_text, background='white',
                                  font=reconfig_font(self.active_font, offset=-2, weight="bold"))
@@ -1224,7 +1233,7 @@ class Application(Tk):
         self.update_idletasks()
 
         # Add table to this side pane
-        is_wid.is_edit_table = CheckbuttonTable(is_wid.screen_is, self.widgets_canvas.screen_icb, self.active_font, text='Power Gates')
+        is_wid.is_edit_table = CheckbuttonTable(is_wid.screen_is, self.widgets_canvas.screen_icb, self.active_font, text='Inputs')
         is_wid.is_edit_table.grid(row=1, column=0, sticky='ns', padx=(10, 0))
         is_wid.is_edit_table.grid_propagate(False)
 
@@ -1254,7 +1263,7 @@ class Application(Tk):
         can_wid.screen_icb.focus_force()
         LineRepository.set_canvas(can_wid.screen_icb)
 
-    def gui_build_context_menu(self):
+    def gui_build_context_menu(self) -> None:
         """Builds the menu which appears when right-clicking in the circuit building mod"""
         cir_wid = self.widgets_custom_circuit
         cir_wid.circuit_context_menu = Popup(self, tearoff=0, menu_mode=True, font=self.active_font)
@@ -1270,41 +1279,31 @@ class Application(Tk):
     def gui_build_circuit_pane(self) -> None:
         """Creates the custom circuit pane"""
         cir_wid = self.widgets_custom_circuit
+        pref_wid = self.widgets_preferences
+
         cir_wid.circuit_border_frame = Frame(self, background='black',
                                           width=self.width - self.input_selection_screen_width - self.border_width,
                                           height=self.circuit_screen_height)
         cir_wid.circuit_border_frame.grid(row=1, column=0, sticky='news')
-        # self.circuit_border_frame.grid_propagate(False)
+        cir_wid.circuit_border_frame.grid_propagate(False)
 
-        cir_wid.screen_circuit = Frame(cir_wid.circuit_border_frame, background='red', #background=self.background_color.get(),
-                                    width=self.width - self.input_selection_screen_width,
-                                    height=self.circuit_screen_height - self.border_width)
-        cir_wid.screen_circuit.grid(row=0, column=0, padx=(0, 0), pady=(self.border_width, 0), sticky="nsew")
-        cir_wid.screen_circuit.grid_propagate(False)
-
-        # print(self.width, self.screen_circuit.winfo_width(), self.screen_circuit.winfo_reqwidth())
-
-        cir_wid.circuit_frame_width = (cir_wid.screen_circuit.winfo_reqwidth() - cir_wid.circuit_action_width) - self.input_selection_screen_width
-        cir_wid.circuit_frame = Frame(cir_wid.screen_circuit, background='blue' , #background=self.background_color.get(),
-                                   width=cir_wid.circuit_frame_width,
-                                   height=self.circuit_screen_height)
-        cir_wid.circuit_frame.grid(row=0, column=0, sticky='news')
-        cir_wid.circuit_frame.grid_propagate(False)
+        cir_wid.screen_circuit = ScrollableHFrame(cir_wid.circuit_border_frame, this_font=self.active_font,
+                                                  bg_color=pref_wid.background_color.get(),
+                                                  width=self.width - self.input_selection_screen_width,
+                                                  height=self.circuit_screen_height - self.border_width - cir_wid.circuit_scrollbar_height)
+        cir_wid.screen_circuit.grid(row=0, column=0, sticky='news', padx=(0, 0), pady=(self.border_width, 0))
+        cir_wid.circuit_border_frame.grid_propagate(False)
 
         cir_wid.new_circuit_pi = PhotoImage(file=join_folder_file(CIRCUIT_IMG_FOLDER, "add_new_circuit.png"))
-        cir_wid.new_circuit_button = LabeledButton(cir_wid.circuit_frame, label_direction=tkinter.S,
-                                                button_content=cir_wid.new_circuit_pi,
-                                                cmd=self.gui_enter_circuit_builder, label_text="Add New Circuit",
-                                                this_font=self.active_font, background='white')
-        cir_wid.new_circuit_button.grid(row=0, column=len(cir_wid.circuit_buttons), sticky='nw', padx=(5, 0), pady=(10, 0))
+        cir_wid.new_circuit_button = LabeledButton(cir_wid.screen_circuit.frame, label_direction=tkinter.S,
+                                                   button_content=cir_wid.new_circuit_pi,
+                                                   cmd=self.gui_enter_circuit_builder, label_text="Add New Circuit",
+                                                   this_font=self.active_font, background='white')
+        cir_wid.new_circuit_button.grid(row=0, column=len(cir_wid.circuit_buttons), sticky='nw', padx=(5, 0),
+                                        pady=(10, 0))
 
         for (i, button) in enumerate(cir_wid.circuit_buttons):
             button.grid_configure(column=i, row=0)
-
-        cir_wid.circuit_action_frame = Frame(cir_wid.screen_circuit, background="green", #background=self.background_color.get(),
-                                          width=cir_wid.circuit_action_width, height=self.circuit_screen_height)
-        cir_wid.circuit_action_frame.grid(row=0, column=1, sticky='nes')
-        cir_wid.circuit_action_frame.grid_propagate(False)
 
     def set_button_state_for_circuit_builder(self, state: str) -> None:
         """Disables invalid buttons when entering circuit building mode"""
@@ -1434,7 +1433,7 @@ class Application(Tk):
 
         cir_wid.circuit_pi = PhotoImage(file=join_folder_file(CIRCUIT_IMG_FOLDER, cir_wid.circuit_image_entry.get()))
         cir_wid.custom_circuit_pis.append(cir_wid.circuit_pi)
-        cir_wid.custom_circuit_button = LabeledButton(cir_wid.circuit_frame, label_direction=tkinter.S,
+        cir_wid.custom_circuit_button = LabeledButton(cir_wid.screen_circuit.frame, label_direction=tkinter.S,
                                                    button_content=cir_wid.circuit_pi,
                                                    cmd=FunctionCallback(self.set_active_fn_custom_circuit,
                                                                         len(cir_wid.circuit_buttons)),
@@ -1618,18 +1617,19 @@ class Application(Tk):
         is_wid = self.widgets_input_selection
         can_wid = self.widgets_canvas
         cir_wid = self.widgets_custom_circuit
+
         is_wid.bordered_frame.config(height=self.height)
         is_wid.screen_is.config(height=self.height)
+
         can_wid.screen_icb.config(width=self.width - self.input_selection_screen_width,
                                height=self.height - self.circuit_screen_height)
-        cir_wid.circuit_border_frame.config(width=self.width - self.input_selection_screen_width,
+        cir_wid.circuit_border_frame.config(width=self.width - self.input_selection_screen_width - self.border_width,
                                          height=self.circuit_screen_height)
-        self.circuit_frame_width = (cir_wid.screen_circuit.winfo_reqwidth() - cir_wid.circuit_action_width) - self.input_selection_screen_width
-        cir_wid.circuit_frame.config(width=self.circuit_frame_width, height=self.circuit_screen_height)
-        cir_wid.screen_circuit.config(width=self.width - self.input_selection_screen_width,
-                                   height=self.circuit_screen_height - self.border_width)
+        cir_wid.screen_circuit.resize(width=self.width - self.input_selection_screen_width,
+                                      height=self.circuit_screen_height - self.border_width - cir_wid.circuit_scrollbar_height)
+
         is_wid.is_edit_table.config_dims(height=self.height - is_wid.is_button_frame.winfo_height() - 30,
-                                       width=self.input_selection_screen_width - 30)
+                                         width=self.input_selection_screen_width - 30)
         self.geometry(str(self.width) + "x" + str(self.height))
 
     def toggle_line_colors(self) -> None:
@@ -1783,6 +1783,7 @@ class Application(Tk):
 
     def load_preferences(self) -> None:
         if not os.path.exists(self.preference_file_name):
+            log_msg(INFO, "Using default settings")
             return
 
         with open(self.preference_file_name, mode="rt", encoding="utf-8") as fp:
