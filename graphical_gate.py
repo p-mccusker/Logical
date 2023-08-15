@@ -15,6 +15,7 @@ from tkinter import *
 from tkinter.font import *
 
 from base_input import *
+from tk_widgets import ResizingCanvas
 
 
 def logic_clock(gate) -> int:
@@ -49,13 +50,13 @@ def get_logic_func_from_name(name: str) -> Optional[Callable]:
 
 
 class LineRepository:
-    """Stores the lines between gates.  The tuple (source gate, destination gate) is the key to get the Canvas item id
+    """Stores the lines between gates.  The tuple (source gate, destination gate) is the key to get the ResizingCanvas item id
        which can be used to modify/delete the line"""
     lines = {}
     canvas = None
 
     @staticmethod
-    def set_canvas(canvas: Canvas):
+    def set_canvas(canvas: ResizingCanvas):
         LineRepository.canvas = canvas
 
     @staticmethod
@@ -131,7 +132,7 @@ def get_line_fill(value: int) -> str:
 class GraphicalGate:
     """Superclass for graphical gates. Only to be inherited from.  Stores the common information between all: the label, 
        image, canvas position, and more."""
-    def __init__(self, image_file: str, label: str = "", canvas: Optional[Canvas] = None,
+    def __init__(self, image_file: str, label: str = "", canvas: Optional[ResizingCanvas] = None,
                  center: (int, int) = (NULL, NULL)):
         self.label = label  # Gate Name
         self.output_gates = []
@@ -143,7 +144,7 @@ class GraphicalGate:
         # If this is an output gate, make the border box larger to increase visibility
         self.border_offset = self.border_width
         self.canvas = canvas
-        self.rect_id = NULL  # Canvas item id for the selected rectangle
+        self.rect_id = NULL  # ResizingCanvas item id for the selected rectangle
         self.width, self.height = 0, 0  # Image width, height
         self.input_id = self.canvas.create_image(self.center[0], self.center[1], image=self.img) \
             if center != (NULL, NULL) else NULL
@@ -176,10 +177,10 @@ class GraphicalGate:
     def add_rect(self) -> int:
         """Adds border rectangle around the gate, returns the rectangle id"""
         if self.rect_id < 0:
-            self.rect_id = self.canvas.create_rectangle(self.top_left()[0] - self.border_offset,
-                                                        self.top_left()[1] - self.border_offset,
-                                                        self.bottom_right()[0] + self.border_offset,
-                                                        self.bottom_right()[1] + self.border_offset,
+            self.rect_id = self.canvas.create_rectangle((self.top_left()[0] - self.border_offset,
+                                                        self.top_left()[1] - self.border_offset),
+                                                        (self.bottom_right()[0] + self.border_offset,
+                                                        self.bottom_right()[1] + self.border_offset),
                                                         width=self.border_width, outline='black')
         return self.rect_id
 
@@ -255,7 +256,7 @@ class GraphicalGate:
 
         self.input_id = self.rect_id = NULL
 
-    def get_canvas(self) -> Canvas:
+    def get_canvas(self) -> ResizingCanvas:
         return self.canvas
 
     def top_left(self) -> (int, int):
@@ -272,7 +273,7 @@ class LogicGate(GraphicalGate):
     line_fill_false = "red"
     line_fill_null = "black"
 
-    def __init__(self, func: Callable, image_file: str, label: str = "", canvas: Optional[Canvas] = None,
+    def __init__(self, func: Callable, image_file: str, label: str = "", canvas: Optional[ResizingCanvas] = None,
                  center: (int, int) = (NULL, NULL), out: int = NULL):
         GraphicalGate.__init__(self, image_file, label=label, canvas=canvas, center=center)
         self.func = func
@@ -366,7 +367,7 @@ class LogicGate(GraphicalGate):
 
 class OutputGate(LogicGate):
 
-    def __init__(self, image_file: str, label: str = "", canvas: Optional[Canvas] = None,
+    def __init__(self, image_file: str, label: str = "", canvas: Optional[ResizingCanvas] = None,
                  center: (int, int) = (NULL, NULL), out: int = NULL):
         LogicGate.__init__(self, output, image_file, label=label, canvas=canvas, center=center, out=out)
         self.output_gates = None
@@ -375,10 +376,10 @@ class OutputGate(LogicGate):
         # If this is an output gate, create a rectangle for the gate instead of using an image, allows rectangle
         # to change color when the output value changes
         self.canvas.delete(self.input_id)
-        self.input_id = self.canvas.create_rectangle(self.top_left()[0],
-                                                     self.top_left()[1],
-                                                     self.bottom_right()[0],
-                                                     self.bottom_right()[1],
+        self.input_id = self.canvas.create_rectangle((self.top_left()[0],
+                                                     self.top_left()[1]),
+                                                     (self.bottom_right()[0],
+                                                     self.bottom_right()[1]),
                                                      width=2, outline='black')
 
         bbox = self.canvas.bbox(self.input_id)
@@ -469,7 +470,7 @@ class ClockTk(LogicGate):
     """An alternating power source, which toggles after self.rate seconds have passed"""
     clocks_paused = True
 
-    def __init__(self, image_file: str, update_rate: float, label: str = "", canvas: Optional[Canvas] = None,
+    def __init__(self, image_file: str, update_rate: float, label: str = "", canvas: Optional[ResizingCanvas] = None,
                  center: (int, int) = (NULL, NULL), default_state: int = TRUE):
         # A clock has no inputs
         super().__init__(logic_clock, image_file, label, canvas, center, out=default_state)
@@ -706,7 +707,7 @@ def disconnect_circuit_to_circuit(circuit1: Circuit, cir_bg1: BaseGate, circuit2
 
 
 class Circuit(GraphicalGate):
-    def __init__(self, image_file: str, canvas: Canvas, font: Font, label: str = "",
+    def __init__(self, image_file: str, canvas: ResizingCanvas, font: Font, label: str = "",
                  center: (int, int) = (NULL, NULL)):
         GraphicalGate.__init__(self, image_file=image_file, label=label, canvas=canvas, center=center)
         # Holds which inside gates are marked as input/output

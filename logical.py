@@ -10,12 +10,11 @@
 #   - Zoom In/Out
 #   - Proper resizing of side pane on font changes
 ########################################################################################################################
-import tkinter
 from enum import *
-from tkinter import filedialog as fd
 import tomlkit
 
 from tk_widgets import *
+from graphical_gate import *
 
 
 def capitalize(string: str) -> str:
@@ -73,6 +72,7 @@ class TimerWidgets:
         self.timer_entry = None  # Entry for timer toggle rate
         self.timer_entry_strvar = StringVar(value=str(default_update_rate))  # Value of the timer update rate
 
+
 class FileWidgets:
     def __init__(self):
         self.filename = ""
@@ -82,6 +82,7 @@ class FileWidgets:
         self.preference_path = ""
         self.save_path = ""
         self.tmp_save_filename = "tmp" + self.filename
+
 
 class PreferenceWidgets:
     def __init__(self):
@@ -95,9 +96,10 @@ class PreferenceWidgets:
         self.font_family_listbox = None
         self.font_size_listbox = None
         self.background_color = StringVar(value="white")
-        self.font_families = [*set(list(tkinter.font.families()))]
+        self.font_families = [*set(list(families()))]
         self.font_families.sort()
         self.font_family = None
+
 
 class CustomCircuitWidgets:
     def __init__(self, circuit_action_width: int):
@@ -152,7 +154,7 @@ class Application(Tk):
     img_height = 50
     max_selectable_gates = 100
     border_width = 3  # Width of border separating canvas from the right pane
-    input_selection_screen_width = 250  # Width of the right pane
+    input_selection_screen_width = 225  # Width of the right pane
     circuit_screen_height = 130
     # Fonts #####################
     font_family = "Helvetica"
@@ -164,6 +166,8 @@ class Application(Tk):
     preference_file_name = "logical.toml"
     # Application Modes #########
     mode = ApplicationModes.REGULAR
+    min_win_height = 600
+    min_win_width = 800
 
     def __init__(self, width: int = 1280, height: int = 720):
         super().__init__()
@@ -172,12 +176,12 @@ class Application(Tk):
             if arg == '-w':
                 width = int(sys.argv[i + 1])
                 if width < 800:
-                    log_msg(ERROR, "Width must be >= 800", ValueError)
+                    log_msg(ERROR, sys.argv[i + 1] + "Width must be >= 800", ValueError)
 
             if arg == '-h':
                 height = int(sys.argv[i + 1])
                 if height < 600:
-                    log_msg(ERROR, sys.argv[i + 1] + ": height must be an integer >", ValueError)
+                    log_msg(ERROR, sys.argv[i + 1] + ": Height must be >= 600", ValueError)
 
         self.width = width
         self.height = height
@@ -204,9 +208,9 @@ class Application(Tk):
         self.active_input_img_index = 0  # Canvas image index of active gate
         # Fonts #####################
         self.active_font = Font(family=Application.font_family, size=Application.font_size, weight=NORMAL,
-                                slant=tkinter.font.ROMAN)
+                                slant=ROMAN)
         self.font_top = Font(family=Application.font_family, size=Application.font_size - 1, weight=NORMAL,
-                             slant=tkinter.font.ROMAN)
+                             slant=ROMAN)
         #############################
         # ICB Widgets ###############
         self.widgets_canvas = CanvasWidgets()
@@ -234,10 +238,10 @@ class Application(Tk):
         #############################
         self.title("Logical")
         self.geometry(str(self.width) + "x" + str(self.height))
-        self.resizable(False, False)
+        self.minsize(self.min_win_width, self.min_win_height)
+        # self.resizable(False, False)
         self.config(background=self.widgets_preferences.background_color.get())
         self.iconphoto(True, self.icon)
-
         self.protocol("WM_DELETE_WINDOW", self.exit)
         self.init_file_paths()
 
@@ -288,9 +292,9 @@ class Application(Tk):
         self.font_family = family
         self.font_size = size
         self.active_font = Font(family=self.font_family, size=self.font_size, weight=NORMAL,
-                                     slant=tkinter.font.ROMAN)
+                                slant=ROMAN)
         self.font_top = Font(family=self.font_family, size=self.font_size - 1, weight=NORMAL,
-                                  slant=tkinter.font.ROMAN)
+                             slant=ROMAN)
 
         self.gui_build_top_menu()
         is_wid = self.widgets_input_selection
@@ -417,7 +421,8 @@ class Application(Tk):
     def click_and_drag_cb(self, event: Event) -> None:
         """Moves a gate around on the canvas while the left mouse button is clicked and held"""
         can_wid = self.widgets_canvas
-        if can_wid.icb_is_gate_active or len(can_wid.icb_selected_gates) != 1:  # If user selected a gate button, then leave
+        if can_wid.icb_is_gate_active or len(can_wid.icb_selected_gates) != 1:
+            # If user selected a gate button, then leave
             return
 
         if can_wid.icb_click_drag_gate is not None:  # if a gate is currently being drug around, keep using it
@@ -482,7 +487,8 @@ class Application(Tk):
                     self.circuit_io_prompt('in', dest_gate)
                     print("connect_gates(): Both gates are circuits")
                     if cir_wid.active_circuit_output_gate is not None and cir_wid.active_circuit_input_gate is not None:
-                        connect_circuit_to_circuit(src_gate, cir_wid.active_circuit_output_gate, dest_gate, cir_wid.active_circuit_input_gate)
+                        connect_circuit_to_circuit(src_gate, cir_wid.active_circuit_output_gate,
+                                                   dest_gate, cir_wid.active_circuit_input_gate)
 
                 self.deselect_active_gates()
             elif len(can_wid.icb_selected_gates) == 1 and can_wid.icb_selected_gates[0] == dest_gate:
@@ -554,7 +560,7 @@ class Application(Tk):
         cir_wid.circuit_io_window.destroy()
         cir_wid.circuit_io_window.update()
 
-    def draw_gate_connection(self) -> None :
+    def draw_gate_connection(self) -> None:
         can_wid = self.widgets_canvas
         if len(can_wid.icb_selected_gates) == 2 and can_wid.icb_selected_gates[0] != can_wid.icb_selected_gates[1]:
             src = can_wid.icb_selected_gates[0] if not isinstance(can_wid.icb_selected_gates[0], tuple) else can_wid.icb_selected_gates[0][0]
@@ -609,8 +615,7 @@ class Application(Tk):
             first_gate.add_rect()
             can_wid.icb_selected_gates.append(gates[0])
         else:  # Deselect first gate and add select this new gate
-            first_gate = can_wid.icb_selected_gates[0] if not isinstance(can_wid.icb_selected_gates[0], tuple) else \
-            can_wid.icb_selected_gates[0][0]
+            first_gate = can_wid.icb_selected_gates[0] if not isinstance(can_wid.icb_selected_gates[0], tuple) else can_wid.icb_selected_gates[0][0]
             first_gate.remove_rect()
             can_wid.icb_selected_gates = can_wid.icb_selected_gates[1:]
             can_wid.icb_selected_gates.append(gates[0])
@@ -1178,23 +1183,34 @@ class Application(Tk):
             self.active_input.delete_text()
             self.active_input_pi_fn = circuit.get_image_file()
 
+    def configure_widgets(self) -> None:
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=0)
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=0)
+
+        # is_wid.is_edit_table.config()
     def gui_build_input_selection_menu(self) -> None:
         """Build the side pane: the power table and gate buttons"""
         is_wid = self.widgets_input_selection
+        actual_frame_width = self.input_selection_screen_width - self.border_width
+        print(actual_frame_width)
         is_wid.bordered_frame = Frame(self, background='black', width=self.input_selection_screen_width,
-                                    height=self.height)
-        is_wid.bordered_frame.grid(row=0, column=1, rowspan=2)
+                                      height=self.height)
+        is_wid.bordered_frame.grid(row=0, column=1, rowspan=2, sticky='nwse')
+        is_wid.bordered_frame.grid_rowconfigure(0, weight=1)
         is_wid.bordered_frame.grid_propagate(False)
 
-        is_wid.screen_is = Frame(is_wid.bordered_frame, background='white',
-                               width=self.input_selection_screen_width - self.border_width, height=self.height)
-        is_wid.screen_is.grid(padx=(self.border_width, 0), sticky="nsew", )
-        is_wid.screen_is.grid_propagate(False)
+        # i = Frame(f, background='white', width=196, height=600)
+        # i.grid(sticky='nesw', padx=(4, 0))
+        # i.grid_rowconfigure(1, weight=1)
+        is_wid.screen_is = Frame(is_wid.bordered_frame, background='white', width=actual_frame_width, height=self.height)
+        is_wid.screen_is.grid(padx=(self.border_width, 0), sticky="nsew")
+        is_wid.screen_is.grid_rowconfigure(1, weight=1)
 
-        # Add gate buttons #############################################################################################
+        ## Add gate buttons #############################################################################################
         is_wid.is_button_frame = LabelFrame(is_wid.screen_is, bg="white", font=self.active_font, text="Logic Gates")
-        is_wid.is_button_frame.grid(column=0, row=0, sticky='w', padx=(10, 0), pady=(10, 0))
-        # self.is_button_frame.grid_propagate(False)
+        is_wid.is_button_frame.grid(row=0, column=0, sticky='nwes', padx=(10, 0), pady=(10, 0))
 
         for (i, func) in enumerate(self.gates.keys()):
             if not isinstance(func, Callable):
@@ -1230,21 +1246,25 @@ class Application(Tk):
 
             is_wid.is_buttons[func] = (is_button, button_label)
 
-        self.update_idletasks()
-
         # Add table to this side pane
-        is_wid.is_edit_table = CheckbuttonTable(is_wid.screen_is, self.widgets_canvas.screen_icb, self.active_font, text='Inputs')
-        is_wid.is_edit_table.grid(row=1, column=0, sticky='ns', padx=(10, 0))
-        is_wid.is_edit_table.grid_propagate(False)
+        is_wid.is_edit_table = CheckbuttonTable(is_wid.screen_is, self.widgets_canvas.screen_icb,
+                                                self.active_font, text='Inputs')
+        is_wid.is_edit_table.grid(row=1, column=0, sticky='news', padx=(10, 10))
+        # is_wid.is_edit_table.grid_propagate(False)
+
+        # self.update_idletasks()
 
     def gui_build_icb(self) -> None:
         """Builds the canvas for the gates to exist on and create all the key bindings"""
+
         can_wid = self.widgets_canvas
-        can_wid.screen_icb = Canvas(self, width=self.width - self.input_selection_screen_width,
-                                 height=self.height - self.circuit_screen_height,
-                                 background=self.widgets_preferences.background_color.get(), highlightthickness=0)
-        can_wid.screen_icb.grid(row=0, column=0, sticky="new")
-        can_wid.screen_icb.grid_propagate(False)
+        can_wid.screen_icb = ResizingCanvas(self, bb_width=self.width - self.input_selection_screen_width,
+                                            bb_height=self.height - self.circuit_screen_height,
+                                            scroll_width=self.width - self.input_selection_screen_width,
+                                            scroll_height=self.height - self.circuit_screen_height,
+                                            color='red')#self.widgets_preferences.background_color.get())
+        can_wid.screen_icb.grid(row=0, column=0, sticky="news")
+        # can_wid.screen_icb.grid_propagate(False)
         # Set key bindings
         can_wid.screen_icb.bind('<Motion>', self.motion_cb)
         can_wid.screen_icb.bind('<Button-1>', self.left_click_cb)
@@ -1282,9 +1302,11 @@ class Application(Tk):
         pref_wid = self.widgets_preferences
 
         cir_wid.circuit_border_frame = Frame(self, background='black',
-                                          width=self.width - self.input_selection_screen_width - self.border_width,
+                                          width=self.width - self.input_selection_screen_width,
                                           height=self.circuit_screen_height)
         cir_wid.circuit_border_frame.grid(row=1, column=0, sticky='news')
+        cir_wid.circuit_border_frame.grid_columnconfigure(0, weight=1)
+        cir_wid.circuit_border_frame.grid_rowconfigure(0, weight=1)
         cir_wid.circuit_border_frame.grid_propagate(False)
 
         cir_wid.screen_circuit = ScrollableHFrame(cir_wid.circuit_border_frame, this_font=self.active_font,
@@ -1292,10 +1314,10 @@ class Application(Tk):
                                                   width=self.width - self.input_selection_screen_width,
                                                   height=self.circuit_screen_height - self.border_width - cir_wid.circuit_scrollbar_height)
         cir_wid.screen_circuit.grid(row=0, column=0, sticky='news', padx=(0, 0), pady=(self.border_width, 0))
-        cir_wid.circuit_border_frame.grid_propagate(False)
+        # cir_wid.circuit_border_frame.grid_propagate(False)
 
         cir_wid.new_circuit_pi = PhotoImage(file=join_folder_file(CIRCUIT_IMG_FOLDER, "add_new_circuit.png"))
-        cir_wid.new_circuit_button = LabeledButton(cir_wid.screen_circuit.frame, label_direction=tkinter.S,
+        cir_wid.new_circuit_button = LabeledButton(cir_wid.screen_circuit.frame, label_direction=S,
                                                    button_content=cir_wid.new_circuit_pi,
                                                    cmd=self.gui_enter_circuit_builder, label_text="Add New Circuit",
                                                    this_font=self.active_font, background='white')
@@ -1356,27 +1378,27 @@ class Application(Tk):
         cir_wid.cir_labelframe.grid(sticky='news', pady=(10, 10), padx=(10, 10))
 
         cir_wid.circuit_name_entry = LabeledEntry(cir_wid.cir_labelframe, label_text="Circuit Name:",
-                                               entry_text="Custom Circuit",
-                                               entry_width=25, entry_height=1, widget_font=self.active_font)
+                                                  entry_text="Custom Circuit",
+                                                  entry_width=25, entry_height=1, widget_font=self.active_font)
         cir_wid.circuit_name_entry.grid(row=0, column=0, sticky='ns', columnspan=2)
 
         cir_wid.circuit_image_entry = LabeledEntry(cir_wid.cir_labelframe, label_text="Circuit Image filename:",
-                                                entry_text="blank_circuit.png",
-                                                entry_width=20, entry_height=1, widget_font=self.active_font)
+                                                    entry_text="blank_circuit.png",
+                                                    entry_width=20, entry_height=1, widget_font=self.active_font)
         cir_wid.circuit_image_entry.grid(row=1, column=0, sticky='ns', columnspan=2)
 
         cir_wid.circuit_inputs_var = StringVar(value="0")
         cir_wid.circuit_inputs_var.trace("w", self.make_input_entry_list)
         cir_wid.circuit_inputs_entry = LabeledEntry(cir_wid.cir_labelframe, label_text="Num. Inputs:",
-                                                 entry_var=cir_wid.circuit_inputs_var,
-                                                 entry_width=2, entry_height=1, widget_font=self.active_font)
+                                                    entry_var=cir_wid.circuit_inputs_var,
+                                                    entry_width=2, entry_height=1, widget_font=self.active_font)
         cir_wid.circuit_inputs_entry.grid(row=2, column=0, sticky='ew')
 
         cir_wid.circuit_outputs_var = StringVar(value='0')
         cir_wid.circuit_outputs_var.trace("w", self.make_output_entry_list)
         cir_wid.circuit_outputs_entry = LabeledEntry(cir_wid.cir_labelframe, label_text="Num. Outputs:",
-                                                  entry_text="0", entry_var=cir_wid.circuit_outputs_var,
-                                                  entry_width=2, entry_height=1, widget_font=self.active_font)
+                                                    entry_text="0", entry_var=cir_wid.circuit_outputs_var,
+                                                    entry_width=2, entry_height=1, widget_font=self.active_font)
         cir_wid.circuit_outputs_entry.grid(row=2, column=1, sticky='ew')
 
         button = Button(cir_wid.cir_labelframe, text="Done", font=self.active_font, command=self.confirm_circuit_prompt)
@@ -1433,12 +1455,12 @@ class Application(Tk):
 
         cir_wid.circuit_pi = PhotoImage(file=join_folder_file(CIRCUIT_IMG_FOLDER, cir_wid.circuit_image_entry.get()))
         cir_wid.custom_circuit_pis.append(cir_wid.circuit_pi)
-        cir_wid.custom_circuit_button = LabeledButton(cir_wid.screen_circuit.frame, label_direction=tkinter.S,
-                                                   button_content=cir_wid.circuit_pi,
-                                                   cmd=FunctionCallback(self.set_active_fn_custom_circuit,
-                                                                        len(cir_wid.circuit_buttons)),
-                                                   label_text=cir_wid.active_circuit.get_label(),
-                                                   this_font=self.active_font, background='white')
+        cir_wid.custom_circuit_button = LabeledButton(cir_wid.screen_circuit.frame, label_direction=S,
+                                                      button_content=cir_wid.circuit_pi,
+                                                      cmd=FunctionCallback(self.set_active_fn_custom_circuit,
+                                                                           len(cir_wid.circuit_buttons)),
+                                                      label_text=cir_wid.active_circuit.get_label(),
+                                                      this_font=self.active_font, background='white')
 
         cir_wid.custom_circuit_button.grid(row=0, column=len(cir_wid.circuit_buttons), sticky='nw', padx=(5, 0), pady=(10, 0))
         cir_wid.circuit_buttons.append(cir_wid.custom_circuit_button)
@@ -1449,7 +1471,7 @@ class Application(Tk):
                                                               len(cir_wid.circuit_buttons)),
                                     image_file=join_folder_file(CIRCUIT_IMG_FOLDER, cir_wid.circuit_image_entry.get()))
 
-    def make_input_entry_list(self, *args):
+    def make_input_entry_list(self, *args) -> None:
         cir_wid = self.widgets_custom_circuit
         if cir_wid.circuit_input_lbframe is not None:
             cir_wid.circuit_input_lbframe.destroy()
@@ -1472,7 +1494,7 @@ class Application(Tk):
         except ValueError:
             return
 
-    def make_output_entry_list(self, *args):
+    def make_output_entry_list(self, *args) -> None:
         cir_wid = self.widgets_custom_circuit
         if cir_wid.circuit_output_lbframe is not None:
             cir_wid.circuit_output_lbframe.destroy()
@@ -1565,8 +1587,8 @@ class Application(Tk):
         self.circuit_error.title("Error")
         frame = Frame(self.circuit_error)
         frame.grid()
-        label = tkinter.Text(frame, font=self.active_font, wrap=tkinter.WORD, width=chars_wide, height=chars_high)
-        label.insert(tkinter.INSERT, msg)
+        label = Text(frame, font=self.active_font, wrap=WORD, width=chars_wide, height=chars_high)
+        label.insert(INSERT, msg)
         label.grid()
         btn = Button(frame, text="Done", font=self.active_font, command=self.exit_circuit_error)
         btn.grid()
@@ -1606,11 +1628,27 @@ class Application(Tk):
 
         self.config(menu=can_wid.icb_menubar)
 
+    def on_resize(self, event: Event) -> None:
+        print("on_resize({0} {1})".format(event.width, event.height))
+
+        # self.widgets_input_selection.bordered_frame.config(width=self.input_selection_screen_width, height=event.height)
+        # self.widgets_input_selection.screen_is.config(width=self.input_selection_screen_width - self.border_width, height=event.height)
+        # self.widgets_canvas.screen_icb.config(width=event.width - self.input_selection_screen_width,
+        #                                       height=event.height)
+        cir_wid = self.widgets_custom_circuit
+        self.widgets_custom_circuit.screen_circuit.resize(width=self.width - self.input_selection_screen_width,
+                                                          height=self.circuit_screen_height - self.border_width - cir_wid.circuit_scrollbar_height)
+
+        # self.update_idletasks()
+
     def gui_build_all(self) -> None:
         self.gui_build_top_menu()
-        self.gui_build_input_selection_menu()
         self.gui_build_icb()
+        self.gui_build_input_selection_menu()
+        self.update_idletasks()
         self.gui_build_circuit_pane()
+        self.configure_widgets()
+        # self.bind('<Configure>', self.on_resize)
 
     def gui_reconfig_dimensions(self):
         """Updates the width and height of the application"""
@@ -1669,8 +1707,8 @@ class Application(Tk):
         color_frame.pack(side=TOP, expand=True, fill=BOTH, padx=(0, 0), pady=(0, 5))
 
         pref_wid.color_labelentry = LabeledEntry(master=color_frame, entry_width=7,
-                                             label_text="Canvas color (name or #XXXXXX):",
-                                             entry_text=pref_wid.background_color.get(), widget_font=self.active_font)
+                                                 label_text="Canvas color (name or #XXXXXX):",
+                                                 entry_text=pref_wid.background_color.get(), widget_font=self.active_font)
         pref_wid.color_labelentry.pack(side=LEFT, padx=(10, 0), pady=(5, 5))
         # Toggle Line Colors ###########################################################################################
         line_colors_frame = Frame(pref_wid.preference_toplevel)
@@ -1679,8 +1717,8 @@ class Application(Tk):
         line_colors_label = Label(line_colors_frame, text="Enable Line Colors:", font=self.active_font)
         line_colors_label.pack(side=LEFT)
 
-        pref_wid.line_colors_checkbox = Checkbutton(line_colors_frame,
-                                                command=self.toggle_line_colors, font=self.active_font)
+        pref_wid.line_colors_checkbox = Checkbutton(line_colors_frame, command=self.toggle_line_colors,
+                                                    font=self.active_font)
         if LogicGate.line_colors_on:
             pref_wid.line_colors_checkbox.select()
         pref_wid.line_colors_checkbox.pack(side=LEFT)
@@ -1693,7 +1731,7 @@ class Application(Tk):
         font_family_label = Label(font_family_frame, text="Font Family", font=self.active_font)
         font_family_label.pack(side=TOP)
         pref_wid.font_family_listbox = Listbox(font_family_frame, font=self.active_font, selectmode=SINGLE,
-                                           exportselection=False)
+                                               exportselection=False)
 
         for family in pref_wid.font_families:
             pref_wid.font_family_listbox.insert(END, family)
@@ -1712,7 +1750,7 @@ class Application(Tk):
         font_size_label = Label(font_size_frame, text="Font Size", font=self.active_font)
         font_size_label.pack(side=TOP)
         pref_wid.font_size_listbox = Listbox(font_size_frame, font=self.active_font, height=len(font_sizes),
-                                         selectmode=SINGLE, exportselection=False)
+                                             selectmode=SINGLE, exportselection=False)
 
         for font_size in font_sizes:
             pref_wid.font_size_listbox.insert(END, font_size)
@@ -1795,7 +1833,7 @@ class Application(Tk):
             LogicGate.line_colors_on = document["Settings"]["Colors"]
             fonts_attrs = document["Settings"]["Font"]
             self.active_font = Font(family=fonts_attrs[0], size=fonts_attrs[1],
-                                         weight=fonts_attrs[2], slant=fonts_attrs[3])
+                                    weight=fonts_attrs[2], slant=fonts_attrs[3])
 
             self.gui_reconfig_dimensions()
             self.widgets_canvas.screen_icb.config(background=self.widgets_preferences.background_color.get())
@@ -1898,6 +1936,177 @@ class Application(Tk):
         self.mainloop()
 
 
+class CheckbuttonTable1(LabelFrame):
+    """Scrollable LabelFrame which stores entries corresponding to each power gate. Each entry has a checkbox that,
+    when clicked, toggles the output of the gate. Can also be right-clicked to change the name of the gate."""
+
+    def __init__(self, parent, return_focus_to: Widget, this_font: Font, *args, **kwargs):
+        LabelFrame.__init__(self, master=parent, background='white', font=this_font, *args,  **kwargs)
+        self.canvas = ResizingCanvas(self, ,highlightthickness=0, background='white')
+        self.frame = Frame(self.canvas, background='white')
+        self.vsb = Scrollbar(self, orient="vertical", command=self.canvas.yview())
+        self.canvas.configure(yscrollcommand=self.vsb.set)
+
+        self.checkbox_padding = {"padx": (10, 0), "pady": (5, 5)}  # The padding applied to each entry
+        self.return_focus_to = return_focus_to
+        self.entries = []  # List holding list of TableCheckbuttons
+
+        self.this_font = this_font
+        self.null = True
+
+        self.vsb.grid(row=0, column=1, sticky='nse', pady=(0, 0))
+        self.canvas.grid(row=0, column=0, sticky='nws', padx=(0, 0))
+
+        self.canvas.create_window((1, 1), window=self.frame, anchor="nw", tags="self.frame")
+        self.frame.bind("<Configure>", self.on_frame_configure)
+
+        self.empty_text_label = Label(self.frame, bg="white", text="No Inputs...", font=this_font)
+        self.empty_text_label.grid(row=0, column=0, sticky='')
+
+    def config_dims(self, width: Optional[int] = None, height: Optional[int] = None) -> None:
+        self.config(width=width, height=height)
+        self.canvas.config(width=self.winfo_reqwidth(), height=self.winfo_reqheight() - 25)
+        self.frame.config(width=self.winfo_reqwidth() - 20, height=self.winfo_reqheight())
+
+    def add_entry(self, gate) -> None:
+        if self.null:
+            self.empty_text_label.grid_forget()
+            self.null = False
+        tbl_entry = TableCheckbutton(self.frame, gate, self.return_focus_to,
+                                     this_font=reconfig_font(self.this_font, offset=-2), popup_font=self.this_font,
+                                     checkbutton_padding=self.checkbox_padding)
+        tbl_entry.grid(row=len(self.entries), sticky='')
+        self.entries.append(tbl_entry)
+
+    def del_entry(self, row: int) -> None:
+        """Removes a gate entry from the table"""
+        if abs(row) > len(self.entries):
+            return
+        row = abs(row)
+        entry = self.entries[row]
+        entry.grid_forget()
+        entry.destroy()
+        self.entries.remove(entry)
+
+        for (i, entry) in enumerate(self.entries):
+            entry.grid_configure(row=i)
+
+        if len(self.entries) == 0:
+            self.empty_text_label.grid()
+            self.null = True
+
+    def get_row(self, row: int) -> Optional[int]:
+        """Returns checkbox value at row"""
+        if abs(row) > len(self.entries):
+            return None
+        return self.entries[row].get()
+
+    def del_gate_entry(self, gate) -> None:
+        """Deletes the entry matching gate"""
+        for i in range(len(self.entries)):
+            if self.entries[i].gate == gate:
+                self.del_entry(i)
+                return
+
+    def set_focus_widget(self, widget: Widget):
+        """Sets the Widget that should receive input focus after the checkbox is clicked."""
+        # By default, after clicking a checkbox, it would recieve focus from tk and cause the keyboard shortcuts
+        # to not work
+        self.return_focus_to = widget
+        for entry in self.entries:
+            entry.set_focus_widget(widget)
+
+    def clear(self) -> None:
+        """Deletes all entries"""
+        for entry in self.entries:
+            entry.grid_forget()
+            entry.destroy()
+
+        self.entries.clear()
+
+        self.empty_text_label.grid()
+        self.null = True
+
+    def set_font(self, new_font: Font) -> None:
+        """Updates the font of the widget and the font of the entries"""
+        self.config(font=new_font)
+        self.this_font = new_font
+        self.empty_text_label.config(font=new_font)
+        for entry in self.entries:
+            entry.set_font(reconfig_font(self.this_font, offset=-2))
+
+        self.update_idletasks()
+
+    def on_frame_configure(self, event: Event) -> None:
+        """Reset the scroll region to encompass the inner frame"""
+        self.canvas.config(width=self.winfo_reqwidth() - 25)
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+
+
+
 if __name__ == "__main__":
-    app = Application()
-    app.run()
+    # app = Application()
+    # app.run()
+    tk = Tk()
+    tk.geometry("800x600")
+    tk.minsize(800, 600)
+#
+    tk.rowconfigure(0, weight=1)
+    # tk.rowconfigure(1, weight=0)
+    # tk.columnconfigure(0, weight=1)
+    # tk.columnconfigure(1, weight=0)
+
+
+    cbt = CheckbuttonTable1(tk, None, ("Calibri", 14), background='white')
+    cbt.grid(row=0, column=0, sticky=news)
+
+    rc = ScrollableHFrame(tk, this_font=("Calibri", 14), bg_color='red', width=800, height=600)
+    rc.grid(row=0, column=0, sticky='news')
+    rc.grid_rowconfigure(0, weight=1)
+    rc.grid_rowconfigure(1, weight=1)
+    rc.grid_columnconfigure(0, weight=1)
+    rc.grid_propagate(False)
+
+    tk.mainloop()
+
+#
+    #c = ResizingCanvas(tk, color='red', bb_width=600, bb_height=400, scroll_width=3000, scroll_height=2000)
+    #c.grid(row=0, column=0, sticky='news')
+#
+    #f = Frame(tk, background='black', width=200, height=600)
+    #f.grid(row=0, column=1, sticky='nesw', rowspan=2)
+    #f.grid_rowconfigure(0, weight=1)
+    #f.grid_propagate(False)
+#
+    #i = Frame(f, background='white', width = 196, height = 600)
+    #i.grid(sticky='nesw', padx=(4, 0))
+    #i.grid_rowconfigure(1, weight=1)
+#
+    #lb = LabelFrame(i, width=196, height=300, background='pink', text="buttons")
+    #lb.grid(row=0, column=0)
+#
+    #rb = LabelFrame(i, width=196, height=300, background='cyan', text="Table")
+    #rb.grid(row=1, column=0, sticky='news')
+#
+    #b = Frame(tk, background='blue', width=600, height=200)
+    #b.grid(row=1, column=0, sticky='nesw')
+    #b.grid_propagate(False)
+#
+    #sg = Sizegrip(tk)
+    #sg.grid(row=1, column=1, sticky=SE)
+#
+    #p1 = PhotoImage(file="images/gates/and.png")
+    #input_id1 = c.create_image(500, 500, image=p1)
+    #p2 = PhotoImage(file="images/gates/and.png")
+    #input_id2 = c.create_image(3000, 3000, image=p2)
+    #c.resize_scroll_region(1, 1)
+#
+    #tk.after(500, None)
+#
+    ## c.condense()
+#
+#
+    #tk.mainloop()
+
+

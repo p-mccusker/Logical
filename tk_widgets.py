@@ -5,11 +5,14 @@
 # Date: 01/04/2023
 # Description: Defines Tk widgets to be used in the circuit application
 ########################################################################################################################
-import tkinter
+from tkinter import *
+from tkinter.ttk import Sizegrip
 from tkinter import scrolledtext
+import tkinter.filedialog as fd
 from tkinter.font import Font
-
-from graphical_gate import *
+from typing import *
+import os
+# from graphical_gate import *
 
 
 def get_widget_bottom_y(widget: Widget) -> int:
@@ -29,6 +32,25 @@ def reconfig_font(this_font: Font, offset: int, weight: Optional[str] = None,
                      size=this_font["size"] + offset,
                      weight=this_font["weight"] if weight is None else weight,
                      slant=this_font["slant"] if slant is None else slant)
+
+
+class ResizingCanvas_old(Canvas):
+    def __init__(self,parent, *args, **kwargs):
+        Canvas.__init__(self,parent, *args, highlightthickness=0, **kwargs)
+        self.bind("<Configure>", self.on_resize)
+        self.height = self.winfo_reqheight()
+        self.width = self.winfo_reqwidth()
+
+    def on_resize(self,event):
+        # determine the ratio of old width/height to new width/height
+        wscale = float(event.width)/self.width
+        hscale = float(event.height)/self.height
+        self.width = event.width
+        self.height = event.height
+        # resize the canvas
+        self.config(width=self.width, height=self.height)
+        # rescale all the objects tagged with the "all" tag
+        self.scale("all",0,0,wscale,hscale)
 
 
 class Popup(Menu):
@@ -78,13 +100,13 @@ class PictureDescription(Frame):
         self.img_label.grid(row=0, column=0, padx=(0, 0), pady=(0, 0), sticky='nsw')
         self.scrollbar_on = scrollbar_on
         if scrollbar_on:
-            self.description = scrolledtext.ScrolledText(self, wrap=tkinter.WORD, width=text_width, height=text_height,
+            self.description = scrolledtext.ScrolledText(self, wrap=WORD, width=text_width, height=text_height,
                                                          font=self.this_font)
         else:
-            self.description = tkinter.Text(self, wrap=tkinter.WORD, width=text_width, height=text_height,
+            self.description = Text(self, wrap=WORD, width=text_width, height=text_height,
                                             font=self.this_font)
         self.description.grid(row=0, column=1, padx=(0, 0), pady=(0, 0), sticky='nse')
-        self.description.insert(tkinter.INSERT, desc_text)
+        self.description.insert(INSERT, desc_text)
         self.description.configure(state='disabled')
 
     def set_font(self, new_font: Font) -> None:
@@ -107,9 +129,9 @@ class LabeledEntry(Frame):
         if not disabled:
             self.entry = Entry(self, textvariable=self.entry_var, background='white', width=entry_width)
         else:
-            self.entry = tkinter.Text(self, font=widget_font, background='white', width=20, wrap=tkinter.WORD,
+            self.entry = Text(self, font=widget_font, background='white', width=20, wrap=WORD,
                                       height=entry_height)
-            self.entry.insert(tkinter.INSERT, entry_text)
+            self.entry.insert(INSERT, entry_text)
             self.entry.configure(state='disabled')
 
         if entry_width is not None:
@@ -141,12 +163,13 @@ class LabeledEntry(Frame):
     def strvar_trace(self, mode: str, cb: Callable) -> None:
         self.entry_var.trace(mode, cb)
 
+games
 
 class TableCheckbutton(Frame):
     """Widget with a label to the left of a checkbox. Is associated with a power gate and when clicked, toggles the
     output of this gate"""
 
-    def __init__(self, parent: Optional[Widget], gate: LogicGate, return_focus_to: Widget, this_font: Font,
+    def __init__(self, parent: Optional[Widget], gate, return_focus_to: Widget, this_font: Font,
                  popup_font: Font, *args, checkbutton_padding: Optional[dict] = None, **kwargs):
         super().__init__(parent, *args, background="white", **kwargs)
         self.gate = gate
@@ -231,8 +254,8 @@ class CheckbuttonTable(LabelFrame):
     """Scrollable LabelFrame which stores entries corresponding to each power gate. Each entry has a checkbox that,
     when clicked, toggles the output of the gate. Can also be right-clicked to change the name of the gate."""
 
-    def __init__(self, parent, return_focus_to: Widget, this_font: Font, *args, **kwargs):
-        LabelFrame.__init__(self, master=parent, background='white', font=this_font, *args, **kwargs)
+    def __init__(self, parent, return_focus_to: Widget, this_font: Font | Tuple[str, int], *args, **kwargs):
+        LabelFrame.__init__(self, master=parent, background='white', font=this_font, *args,  **kwargs)
         self.canvas = Canvas(self, highlightthickness=0, background='white')
         self.frame = Frame(self.canvas, background='white')
         self.vsb = Scrollbar(self, orient="vertical", command=self.canvas.yview)
@@ -240,7 +263,7 @@ class CheckbuttonTable(LabelFrame):
 
         self.checkbox_padding = {"padx": (10, 0), "pady": (5, 5)}  # The padding applied to each entry
         self.return_focus_to = return_focus_to
-        self.entries = []  # List holding list of TableCheckbutton
+        self.entries = []  # List holding list of TableCheckbuttons
 
         self.this_font = this_font
         self.null = True
@@ -292,7 +315,7 @@ class CheckbuttonTable(LabelFrame):
             return None
         return self.entries[row].get()
 
-    def del_gate_entry(self, gate: LogicGate) -> None:
+    def del_gate_entry(self, gate) -> None:
         """Deletes the entry matching gate"""
         for i in range(len(self.entries)):
             if self.entries[i].gate == gate:
@@ -390,6 +413,64 @@ class ScrollableHFrame(Frame):
         self.frame.config(width=width, height=height)
 
 
+class ResizingCanvas(Frame):
+    def __init__(self, *args, color: str, bb_width: int, bb_height: int, scroll_width: int | None = None,
+                 scroll_height: int | None = None, **kwargs):
+        Frame.__init__(self, *args, background=color, width=bb_width, height=bb_height, **kwargs)
+
+        self.xbar = Scrollbar(self, orient=HORIZONTAL)
+        self.ybar = Scrollbar(self)
+        self.item_canvas = Canvas(self, background=color, width=bb_width, height=bb_height,
+                                        xscrollcommand=self.xbar.set, yscrollcommand=self.ybar.set,
+                                        highlightthickness=0)
+
+        self.xbar.configure(command=self.item_canvas.xview)
+        self.ybar.configure(command=self.item_canvas.yview)
+
+
+        self.item_canvas.configure(scrollregion=(0, 0, scroll_width if scroll_width else bb_width,
+                                                 scroll_height if scroll_height else bb_height))
+        self.item_canvas.configure(background='red')
+
+        self.item_canvas.grid(row=0, column=0, sticky="nsew")
+        self.xbar.grid(row=1, column=0, sticky="ew")
+        self.ybar.grid(row=0, column=1, sticky="ns")
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+    def condense(self):
+        self.item_canvas.configure(scrollregion = self.item_canvas.bbox("all"))
+
+    def resize_scroll_region(self, x_inc: int, y_inc: int) -> None:
+        bbox = self.item_canvas.bbox("all")
+        print(bbox)
+
+    def create_image(self, x: int, y: int, **kwargs) -> int:
+        return self.item_canvas.create_image(x, y, **kwargs)
+
+    def create_rectangle(self, c1: (float, float), c2: (float, float), **kwargs) -> int:
+        return self.item_canvas.create_rectangle(c1, c2, **kwargs)
+
+    def create_window(self, *args, **kwargs) -> int:
+        return self.item_canvas.create_rectangle(*args, **kwargs)
+
+    def delete(self, id: str | int) -> None:
+        self.item_canvas.delete(id)
+
+    def coords(self, *args, **kwargs) -> list[float]:
+        return self.item_canvas.coords(*args, **kwargs)
+
+    def configure(self, *args, **kwargs) -> None:
+        self.item_canvas.configure(*args, **kwargs)
+
+    def bbox(self, *args) -> Optional[tuple[int, int, int, int]]:
+        return self.item_canvas.bbox(*args)
+
+    def yview(self):
+        return self.item_canvas.yview
+
+
+
 class LabeledButton(Frame):
 
     def __init__(self, *args, label_direction: Literal['n', 's', 'e', 'w'], button_content: Union[PhotoImage | str],
@@ -400,16 +481,16 @@ class LabeledButton(Frame):
         self.label = Label(self, font=self.this_font, text=label_text)
         self.button = Button(self, font=self.this_font, command=cmd)
 
-        if label_direction == tkinter.N:
+        if label_direction == N:
             self.label.grid(row=0, column=0, sticky=label_sticky)
             self.button.grid(row=1, column=0, sticky=button_sticky)
-        elif label_direction == tkinter.S:
+        elif label_direction == S:
             self.label.grid(row=1, column=0, sticky=label_sticky)
             self.button.grid(row=0, column=0, sticky=button_sticky)
-        elif label_direction == tkinter.E:
+        elif label_direction == E:
             self.label.grid(row=0, column=1, sticky=label_sticky)
             self.button.grid(row=0, column=0, sticky=button_sticky)
-        elif label_direction == tkinter.W:
+        elif label_direction == W:
             self.label.grid(row=0, column=0, sticky=label_sticky)
             self.button.grid(row=1, column=1, sticky=button_sticky)
         else:
