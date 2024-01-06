@@ -163,8 +163,6 @@ class LabeledEntry(Frame):
     def strvar_trace(self, mode: str, cb: Callable) -> None:
         self.entry_var.trace(mode, cb)
 
-games
-
 class TableCheckbutton(Frame):
     """Widget with a label to the left of a checkbox. Is associated with a power gate and when clicked, toggles the
     output of this gate"""

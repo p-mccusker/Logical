@@ -50,8 +50,8 @@ def get_logic_func_from_name(name: str) -> Optional[Callable]:
 
 
 class LineRepository:
-    """Stores the lines between gates.  The tuple (source gate, destination gate) is the key to get the ResizingCanvas item id
-       which can be used to modify/delete the line"""
+    """Stores the lines between gates.  The tuple (source gate, destination gate) is the key to get the ResizingCanvas
+    item id which can be used to modify/delete the line"""
     lines = {}
     canvas = None
 

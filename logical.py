@@ -172,6 +172,7 @@ class Application(Tk):
     def __init__(self, width: int = 1280, height: int = 720):
         super().__init__()
         # Parse command line arguments
+        self.circuit_error = None
         for i, arg in enumerate(sys.argv):
             if arg == '-w':
                 width = int(sys.argv[i + 1])
@@ -1568,7 +1569,7 @@ class Application(Tk):
             log_msg(INFO, "No gates selected for i/o")
 
     def circuit_io_is_undefined(self) -> bool:
-        """Returns if any circiut input or output slot is undefined"""
+        """Returns true if any circuit input or output slot is undefined"""
         cir_wid = self.widgets_custom_circuit
         for connection in cir_wid.active_circuit.connections:
             for gate_label in cir_wid.active_circuit.connections[connection]:
@@ -1865,7 +1866,8 @@ class Application(Tk):
 
         timer_entry_label = Label(entry_frame, text="Timer Update Rate (seconds):", font=self.active_font)
         timer_entry_label.grid(row=0, column=0, padx=(0, 5), pady=(0, 0), sticky=W)
-        timer_wid.timer_entry = Entry(entry_frame, textvariable=timer_wid.timer_entry_strvar, width=5, font=self.active_font)
+        timer_wid.timer_entry = Entry(entry_frame, textvariable=timer_wid.timer_entry_strvar, width=5,
+                                      font=self.active_font)
         timer_wid.timer_entry.grid(row=0, column=1, padx=(0, 0), pady=(0, 0), sticky=W)
 
         cb_frame = Frame(timer_labelframe)
@@ -1942,7 +1944,7 @@ class CheckbuttonTable1(LabelFrame):
 
     def __init__(self, parent, return_focus_to: Widget, this_font: Font, *args, **kwargs):
         LabelFrame.__init__(self, master=parent, background='white', font=this_font, *args,  **kwargs)
-        self.canvas = ResizingCanvas(self, ,highlightthickness=0, background='white')
+        self.canvas = ResizingCanvas(self, highlightthickness=0, color='white', bb_width=self.winfo_reqwidth(), bb_height=self.winfo_reqheight())
         self.frame = Frame(self.canvas, background='white')
         self.vsb = Scrollbar(self, orient="vertical", command=self.canvas.yview())
         self.canvas.configure(yscrollcommand=self.vsb.set)
@@ -2046,9 +2048,9 @@ class CheckbuttonTable1(LabelFrame):
 
 
 if __name__ == "__main__":
-    # app = Application()
-    # app.run()
-    tk = Tk()
+    app = Application()
+    app.run()
+    """tk = Tk()
     tk.geometry("800x600")
     tk.minsize(800, 600)
 #
@@ -2058,8 +2060,8 @@ if __name__ == "__main__":
     # tk.columnconfigure(1, weight=0)
 
 
-    cbt = CheckbuttonTable1(tk, None, ("Calibri", 14), background='white')
-    cbt.grid(row=0, column=0, sticky=news)
+    cbt = CheckbuttonTable1(tk, None, ("Calibri", 14))
+    cbt.grid(row=0, column=0, sticky=N+E+S+W)
 
     rc = ScrollableHFrame(tk, this_font=("Calibri", 14), bg_color='red', width=800, height=600)
     rc.grid(row=0, column=0, sticky='news')
@@ -2068,7 +2070,7 @@ if __name__ == "__main__":
     rc.grid_columnconfigure(0, weight=1)
     rc.grid_propagate(False)
 
-    tk.mainloop()
+    tk.mainloop() """
 
 #
     #c = ResizingCanvas(tk, color='red', bb_width=600, bb_height=400, scroll_width=3000, scroll_height=2000)
